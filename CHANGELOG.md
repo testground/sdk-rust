@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - [unreleased]
+## [0.1.0] - 2022-01-24
 ### Added
-- Add initial scaffolding with basic synchronization client.
+- Add initial scaffolding with basic synchronization client. See [PR 1].
+
+[PR 1]: https://github.com/testground/sdk-rust/pull/1
