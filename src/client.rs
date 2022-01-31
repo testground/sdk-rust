@@ -10,7 +10,7 @@ use tokio_util::either::Either;
 use crate::background::{BackgroundTask, Command};
 use crate::errors::{ReceiveError, SendError};
 
-/// Basic synchronization client enabling one to send signals and await barriers.
+/// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
 pub struct Client {
     cmd_tx: Sender<Command>,
     handle: JoinHandle<()>,

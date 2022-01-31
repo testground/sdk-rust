@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use soketto::handshake::{Client, ServerResponse};
-
 use tokio::{
     sync::{mpsc, oneshot},
     task::JoinHandle,
@@ -9,15 +7,13 @@ use tokio::{
 
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 
-use tokio_util::{
-    compat::{Compat, TokioAsyncReadCompatExt},
-    either::Either,
-};
+use tokio_util::either::Either;
 
 use crate::{
     errors::{ReceiveError, SendError},
     requests::{Request, RequestType},
     responses::{Response, ResponseType},
+    websocket::WebsocketClient,
 };
 
 #[derive(Debug)]
@@ -45,21 +41,20 @@ pub enum Command {
 }
 
 pub struct BackgroundTask {
+    req_tx: mpsc::Sender<(Request, oneshot::Sender<Result<(), SendError>>)>,
+    handle: JoinHandle<()>,
+    res_rx: ReceiverStream<Result<Response, ReceiveError>>,
+
     next_id: u64,
 
     context: String,
 
     cmd_rx: ReceiverStream<Command>,
-    req_tx: mpsc::Sender<(Request, oneshot::Sender<Result<(), SendError>>)>,
-
-    res_rx: ReceiverStream<Result<Response, ReceiveError>>,
 
     pending_pub: HashMap<u64, oneshot::Sender<Result<(), Either<SendError, ReceiveError>>>>,
     pending_sub: HashMap<u64, mpsc::Sender<Result<String, Either<SendError, ReceiveError>>>>,
     pending_signal: HashMap<u64, oneshot::Sender<Result<u64, Either<SendError, ReceiveError>>>>,
     pending_barrier: HashMap<u64, oneshot::Sender<Result<(), Either<SendError, ReceiveError>>>>,
-
-    handle: JoinHandle<()>,
 }
 
 impl Drop for BackgroundTask {
@@ -73,7 +68,7 @@ impl BackgroundTask {
         let cmd_rx = ReceiverStream::new(cmd_rx);
 
         let context = format!(
-            "run:{}:plan:{}:case:{}:states:",
+            "run:{}:plan:{}:case:{}",
             std::env::var("TEST_RUN").unwrap(),
             std::env::var("TEST_PLAN").unwrap(),
             std::env::var("TEST_CASE").unwrap(),
@@ -82,7 +77,7 @@ impl BackgroundTask {
         let (req_tx, req_rx) = mpsc::channel(10);
         let (res_tx, res_rx) = mpsc::channel(10);
 
-        let mut web = WebReceiver::new(res_tx, req_rx).await?;
+        let mut web = WebsocketClient::new(res_tx, req_rx).await?;
 
         let handle = tokio::spawn(async move {
             web.run().await;
@@ -104,10 +99,12 @@ impl BackgroundTask {
         })
     }
 
-    fn contextualize_state(&self, mut state: String) -> String {
-        state.insert_str(0, &self.context);
+    fn contextualize_state(&self, state: String) -> String {
+        format!("{}:states:{}", self.context, state)
+    }
 
-        state
+    fn contextualize_topic(&self, topic: String) -> String {
+        format!("{}:topics:{}", self.context, topic)
     }
 
     fn next_id(&mut self) -> u64 {
@@ -140,7 +137,7 @@ impl BackgroundTask {
                 payload,
                 sender,
             } => {
-                //TODO contextualize topic
+                let topic = self.contextualize_topic(topic);
 
                 let request = Request {
                     id: id.to_string(),
@@ -163,7 +160,7 @@ impl BackgroundTask {
                 }
             }
             Command::Subscribe { topic, stream } => {
-                //TODO contextualize topic
+                let topic = self.contextualize_topic(topic);
 
                 let request = Request {
                     id: id.to_string(),
@@ -248,15 +245,9 @@ impl BackgroundTask {
             }
         };
 
-        let Response {
-            id,
-            error,
-            response,
-        } = res;
+        let Response { id, response } = res;
 
         let idx = id.parse().unwrap();
-
-        //TODO deserialize error
 
         match response {
             ResponseType::SignalEntry { seq } => {
@@ -289,111 +280,9 @@ impl BackgroundTask {
 
                 self.pending_sub.insert(idx, stream);
             }
-        }
-    }
-}
-
-struct WebReceiver {
-    rx: soketto::connection::Receiver<Compat<tokio::net::TcpStream>>,
-    tx: soketto::connection::Sender<Compat<tokio::net::TcpStream>>,
-
-    sender: mpsc::Sender<Result<Response, ReceiveError>>,
-    receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), SendError>>)>,
-}
-
-impl WebReceiver {
-    async fn new(
-        sender: mpsc::Sender<Result<Response, ReceiveError>>,
-        receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), SendError>>)>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let socket = tokio::net::TcpStream::connect(("testground-sync-service", 5050)).await?;
-
-        let mut client = Client::new(socket.compat(), "...", "/");
-
-        let (tx, rx) = match client.handshake().await? {
-            ServerResponse::Accepted { .. } => client.into_builder().finish(),
-            ServerResponse::Redirect {
-                status_code,
-                location,
-            } => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Remote redirected to {}. Status code {}",
-                        location, status_code
-                    ),
-                )
-                .into())
-            }
-            ServerResponse::Rejected { status_code } => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionRefused,
-                    format!("Remote refused connection. Status code {}", status_code),
-                )
-                .into())
-            }
-        };
-
-        Ok(Self {
-            rx,
-            tx,
-            sender,
-            receiver,
-        })
-    }
-
-    async fn run(&mut self) {
-        let mut message = Vec::new();
-
-        loop {
-            message.clear();
-
-            tokio::select! {
-                res = self.rx.receive_data(&mut message) => {
-                    if let Err(e) = res {
-                        self.sender
-                            .send(Err(e.into()))
-                            .await
-                            .expect("receiver not dropped");
-                        continue;
-                    }
-
-                    match serde_json::from_slice(&message) {
-                        Ok(msg) => {
-                            self.sender
-                                .send(Ok(msg))
-                                .await
-                                .expect("receiver not dropped");
-                        }
-                        Err(e) => {
-                            self.sender
-                                .send(Err(e.into()))
-                                .await
-                                .expect("receiver not dropped");
-                        }
-                    }
-                },
-                req = self.receiver.recv() => {
-                    let (req, tx) = match req {
-                        Some(req) => req,
-                        None => continue,
-                    };
-
-                    let res = self.send_request(req).await;
-
-                    tx.send(res).expect("receiver not dropped");
-                },
+            ResponseType::Error(error) => {
+                //TODO
             }
         }
-    }
-
-    async fn send_request(&mut self, req: Request) -> Result<(), SendError> {
-        let json = serde_json::to_string(&req)?;
-
-        self.tx.send_text(json).await?;
-
-        self.tx.flush().await?;
-
-        Ok(())
     }
 }
