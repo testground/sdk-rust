@@ -9,6 +9,7 @@ use tokio_util::either::Either;
 
 use crate::background::{BackgroundTask, Command};
 use crate::errors::{ReceiveError, SendError};
+use crate::events::Event;
 
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
 pub struct Client {
@@ -69,7 +70,43 @@ impl Client {
         ReceiverStream::new(out)
     }
 
-    pub async fn signal(&self, state: impl Into<Cow<'static, str>>) -> Result<u64, Either<SendError, ReceiveError>> {
+    pub async fn signal_and_wait(
+        &self,
+        state: impl Into<Cow<'static, str>>,
+        target: u64,
+    ) -> Result<u64, Either<SendError, ReceiveError>> {
+        let (sender, receiver) = oneshot::channel();
+
+        let state = state.into().into_owned();
+
+        let cmd = Command::Signal {
+            state: state.clone(),
+            sender,
+        };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        let res = receiver.await.expect("sender not dropped")?;
+
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::Barrier {
+            state,
+            target,
+            sender,
+        };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        receiver.await.expect("sender not dropped")?;
+
+        Ok(res)
+    }
+
+    pub async fn signal(
+        &self,
+        state: impl Into<Cow<'static, str>>,
+    ) -> Result<u64, Either<SendError, ReceiveError>> {
         let (sender, receiver) = oneshot::channel();
 
         let state = state.into().into_owned();
@@ -93,6 +130,43 @@ impl Client {
             target,
             sender,
         };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        receiver.await.expect("sender not dropped")
+    }
+
+    pub async fn wait_network_initialized(&self) -> Result<(), Either<SendError, ReceiveError>> {
+        // Publish
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::WaitNetworkInitializedStart { sender };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        let _ = receiver.await.expect("sender not dropped");
+
+        // Barrier
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::WaitNetworkInitializedBarrier { sender };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        let _ = receiver.await.expect("sender not dropped");
+
+        // Message
+        println!(
+            "{:?}",
+            Event::Message {
+                message: "network initialisation successful".to_owned(),
+            }
+        );
+
+        // Event
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::WaitNetworkInitializedEnd { sender };
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 
