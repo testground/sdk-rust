@@ -69,9 +69,10 @@ impl Client {
         ReceiverStream::new(out)
     }
 
-    pub async fn signal(&mut self, state: String) -> Result<u64, Either<SendError, ReceiveError>> {
+    pub async fn signal(&mut self, state: impl Into<Cow<'static, str>>) -> Result<u64, Either<SendError, ReceiveError>> {
         let (sender, receiver) = oneshot::channel();
 
+        let state = state.into().into_owned();
         let cmd = Command::Signal { state, sender };
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
@@ -81,11 +82,12 @@ impl Client {
 
     pub async fn wait_for_barrier(
         &mut self,
-        state: String,
+        state: impl Into<Cow<'static, str>>,
         target: u64,
     ) -> Result<(), Either<SendError, ReceiveError>> {
         let (sender, receiver) = oneshot::channel();
 
+        let state = state.into().into_owned();
         let cmd = Command::Barrier {
             state,
             target,
