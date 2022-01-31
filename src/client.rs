@@ -69,7 +69,7 @@ impl Client {
         ReceiverStream::new(out)
     }
 
-    pub async fn signal(&mut self, state: impl Into<Cow<'static, str>>) -> Result<u64, Either<SendError, ReceiveError>> {
+    pub async fn signal(&self, state: impl Into<Cow<'static, str>>) -> Result<u64, Either<SendError, ReceiveError>> {
         let (sender, receiver) = oneshot::channel();
 
         let state = state.into().into_owned();
@@ -81,7 +81,7 @@ impl Client {
     }
 
     pub async fn wait_for_barrier(
-        &mut self,
+        &self,
         state: impl Into<Cow<'static, str>>,
         target: u64,
     ) -> Result<(), Either<SendError, ReceiveError>> {
