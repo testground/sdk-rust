@@ -1,4 +1,7 @@
-use soketto::handshake::{Client, ServerResponse};
+use soketto::{
+    handshake::{Client, ServerResponse},
+    Data,
+};
 
 use tokio::{
     net::TcpStream,
@@ -73,7 +76,7 @@ impl<'a> WebsocketClient<'a> {
         loop {
             tokio::select! {
                 res = socket_packets.next() => {
-                    let res = res.unwrap();
+                    let res: Result<(Data, Vec<u8>), soketto::connection::Error> = res.unwrap();//infinite stream
 
                     if let Err(e) = res {
                         self.sender

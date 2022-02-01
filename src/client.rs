@@ -140,7 +140,7 @@ impl Client {
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 
-        let _ = receiver.await.expect("sender not dropped");
+        receiver.await.expect("sender not dropped")?;
 
         // Barrier
         let (sender, receiver) = oneshot::channel();
@@ -149,7 +149,7 @@ impl Client {
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 
-        let _ = receiver.await.expect("sender not dropped");
+        receiver.await.expect("sender not dropped")?;
 
         // Message
         println!(

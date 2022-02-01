@@ -362,7 +362,7 @@ impl BackgroundTask {
         let res = match res {
             Ok(res) => res,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{:?}", e);
                 return;
             }
         };
