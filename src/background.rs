@@ -87,11 +87,9 @@ impl BackgroundTask {
         let (req_tx, req_rx) = mpsc::channel(10);
         let (res_tx, res_rx) = mpsc::channel(10);
 
-        let mut web = WebsocketClient::new(res_tx, req_rx).await?;
+        let web = WebsocketClient::new(res_tx, req_rx).await?;
 
-        let handle = tokio::spawn(async move {
-            web.run().await;
-        });
+        let handle = tokio::spawn(web.run());
 
         let res_rx = ReceiverStream::new(res_rx);
 

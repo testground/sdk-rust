@@ -1,7 +1,11 @@
 use soketto::handshake::{Client, ServerResponse};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    net::TcpStream,
+    sync::{mpsc, oneshot},
+};
 
+use tokio_stream::StreamExt;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::{
@@ -10,25 +14,23 @@ use crate::{
     responses::Response,
 };
 
-pub struct WebsocketClient {
-    rx: soketto::connection::Receiver<Compat<tokio::net::TcpStream>>,
-    tx: soketto::connection::Sender<Compat<tokio::net::TcpStream>>,
+pub struct WebsocketClient<'a> {
+    client: Client<'a, Compat<TcpStream>>,
 
     sender: mpsc::Sender<Result<Response, ReceiveError>>,
     receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), SendError>>)>,
 }
 
-impl WebsocketClient {
+impl<'a> WebsocketClient<'a> {
     pub async fn new(
         sender: mpsc::Sender<Result<Response, ReceiveError>>,
         receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), SendError>>)>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<WebsocketClient<'a>, Box<dyn std::error::Error>> {
         let socket = tokio::net::TcpStream::connect(("testground-sync-service", 5050)).await?;
 
         let mut client = Client::new(socket.compat(), "...", "/");
 
-        let (tx, rx) = match client.handshake().await? {
-            ServerResponse::Accepted { .. } => client.into_builder().finish(),
+        match client.handshake().await? {
             ServerResponse::Redirect {
                 status_code,
                 location,
@@ -49,24 +51,34 @@ impl WebsocketClient {
                 )
                 .into())
             }
-        };
+            _ => {}
+        }
 
         Ok(Self {
-            rx,
-            tx,
+            client,
             sender,
             receiver,
         })
     }
+    pub async fn run(mut self) {
+        let (mut tx, rx) = self.client.into_builder().finish();
 
-    pub async fn run(&mut self) {
-        let mut message = Vec::new();
+        let socket_packets = futures_util::stream::unfold(rx, move |mut rx| async {
+            let mut buf = Vec::new();
+            let ret = match rx.receive_data(&mut buf).await {
+                Ok(ty) => Ok((ty, buf)),
+                Err(err) => Err(err),
+            };
+            Some((ret, rx))
+        });
+
+        futures::pin_mut!(socket_packets);
 
         loop {
-            message.clear();
-
             tokio::select! {
-                res = self.rx.receive_data(&mut message) => {
+                res = socket_packets.next() => {
+                    let res = res.unwrap();
+
                     if let Err(e) = res {
                         self.sender
                             .send(Err(e.into()))
@@ -75,7 +87,9 @@ impl WebsocketClient {
                         continue;
                     }
 
-                    match serde_json::from_slice(&message) {
+                    let (_, buf) = res.unwrap();
+
+                    match serde_json::from_slice(&buf) {
                         Ok(msg) => {
                             self.sender
                                 .send(Ok(msg))
@@ -91,26 +105,32 @@ impl WebsocketClient {
                     }
                 },
                 req = self.receiver.recv() => {
-                    let (req, tx) = match req {
+                    let (req, sender) = match req {
                         Some(req) => req,
-                        None => continue,
+                        None => return,
                     };
 
-                    let res = self.send_request(req).await;
+                    let json = match serde_json::to_string(&req) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            sender.send(Err(e.into())).expect("receiver not dropped");
+                            continue;
+                        }
+                    };
 
-                    tx.send(res).expect("receiver not dropped");
+                    if let Err(e) = tx.send_text(json).await {
+                        sender.send(Err(e.into())).expect("receiver not dropped");
+                        continue;
+                    }
+
+                    if let Err(e) = tx.flush().await {
+                        sender.send(Err(e.into())).expect("receiver not dropped");
+                        continue;
+                    }
+
+                    sender.send(Ok(())).expect("receiver not dropped");
                 },
             }
         }
-    }
-
-    async fn send_request(&mut self, req: Request) -> Result<(), SendError> {
-        let json = serde_json::to_string(&req)?;
-
-        self.tx.send_text(json).await?;
-
-        self.tx.flush().await?;
-
-        Ok(())
     }
 }
