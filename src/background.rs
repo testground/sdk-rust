@@ -367,69 +367,76 @@ impl BackgroundTask {
             }
         };
 
-        let Response { id, response } = res;
+        let Response {
+            id,
+            error,
+            response,
+        } = res;
 
         let idx = id.parse().unwrap();
 
-        match response {
-            ResponseType::SignalEntry { seq } => {
-                let sender = match self.pending_signal.remove(&idx) {
-                    Some(sender) => sender,
-                    None => {
-                        eprintln!("Signal response {} not found", idx);
+        if let Some(response) = response {
+            match response {
+                ResponseType::SignalEntry { seq } => {
+                    let sender = match self.pending_signal.remove(&idx) {
+                        Some(sender) => sender,
+                        None => {
+                            eprintln!("Signal response {} not found", idx);
+                            return;
+                        }
+                    };
+
+                    sender.send(Ok(seq)).expect("receiver not dropped");
+                }
+                ResponseType::Publish { .. } => {
+                    let sender = match self.pending_general.remove(&idx) {
+                        Some(sender) => sender,
+                        None => {
+                            eprintln!("Publish response {} not found", idx);
+                            return;
+                        }
+                    };
+
+                    sender.send(Ok(())).expect("receiver not dropped");
+                }
+                ResponseType::Subscribe(msg) => {
+                    let stream = match self.pending_sub.remove(&idx) {
+                        Some(sender) => sender,
+                        None => return,
+                    };
+
+                    if stream.is_closed() {
                         return;
                     }
-                };
 
-                sender.send(Ok(seq)).expect("receiver not dropped");
+                    stream.send(Ok(msg)).await.expect("stream not dropped");
+
+                    self.pending_sub.insert(idx, stream);
+                }
             }
-            ResponseType::Publish { .. } => {
-                let sender = match self.pending_general.remove(&idx) {
-                    Some(sender) => sender,
-                    None => {
-                        eprintln!("Publish response {} not found", idx);
-                        return;
-                    }
-                };
+        }
 
-                sender.send(Ok(())).expect("receiver not dropped");
+        if let Some(error) = error {
+            if let Some(sender) = self.pending_general.remove(&idx) {
+                sender
+                    .send(Err(Error::SyncService(error)))
+                    .expect("receiver not dropped");
+                return;
             }
-            ResponseType::Subscribe(msg) => {
-                let stream = match self.pending_sub.remove(&idx) {
-                    Some(sender) => sender,
-                    None => return,
-                };
 
-                if stream.is_closed() {
-                    return;
-                }
-
-                stream.send(Ok(msg)).await.expect("stream not dropped");
-
-                self.pending_sub.insert(idx, stream);
+            if let Some(sender) = self.pending_signal.remove(&idx) {
+                sender
+                    .send(Err(Error::SyncService(error)))
+                    .expect("receiver not dropped");
+                return;
             }
-            ResponseType::Error(error) => {
-                if let Some(sender) = self.pending_general.remove(&idx) {
-                    sender
-                        .send(Err(Error::SyncService(error)))
-                        .expect("receiver not dropped");
-                    return;
-                }
 
-                if let Some(sender) = self.pending_signal.remove(&idx) {
-                    sender
-                        .send(Err(Error::SyncService(error)))
-                        .expect("receiver not dropped");
-                    return;
-                }
-
-                if let Some(sender) = self.pending_sub.remove(&idx) {
-                    sender
-                        .send(Err(Error::SyncService(error)))
-                        .await
-                        .expect("receiver not dropped");
-                    return;
-                }
+            if let Some(sender) = self.pending_sub.remove(&idx) {
+                sender
+                    .send(Err(Error::SyncService(error)))
+                    .await
+                    .expect("receiver not dropped");
+                return;
             }
         }
     }

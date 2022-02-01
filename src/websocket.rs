@@ -88,6 +88,13 @@ impl<'a> WebsocketClient<'a> {
 
                     let (_, buf) = res.unwrap();
 
+                    #[cfg(debug_assertions)]
+                    {
+                        let string_res = String::from_utf8_lossy(&buf);
+
+                        println!("Raw response: {}", string_res);
+                    }
+
                     match serde_json::from_slice(&buf) {
                         Ok(msg) => {
                             self.sender
