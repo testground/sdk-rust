@@ -107,7 +107,10 @@ impl<'a> WebsocketClient<'a> {
                 req = self.receiver.recv() => {
                     let (req, sender) = match req {
                         Some(req) => req,
-                        None => return,
+                        None => {
+                            eprintln!("Web socket request sender dropped");
+                            return;
+                        },
                     };
 
                     let json = match serde_json::to_string(&req) {

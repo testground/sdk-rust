@@ -137,7 +137,7 @@ impl Client {
     }
 
     pub async fn wait_network_initialized(&self) -> Result<(), Either<SendError, ReceiveError>> {
-        // Publish
+        // Event
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::WaitNetworkInitializedStart { sender };

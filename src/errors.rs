@@ -14,6 +14,8 @@ pub enum ReceiveError {
     Soketto(#[from] soketto::connection::Error),
     #[error("Serde: {0}")]
     Serde(#[from] serde_json::error::Error),
-    #[error("{0}")]
+    #[error("UTF-8: {0}")]
     FromUtf8(#[from] std::string::FromUtf8Error),
+    #[error("Sync-Service: {0}")]
+    Sync(String),
 }

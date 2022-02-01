@@ -56,20 +56,19 @@ pub enum Command {
 }
 
 pub struct BackgroundTask {
-    req_tx: mpsc::Sender<(Request, oneshot::Sender<Result<(), SendError>>)>,
+    websocket_tx: mpsc::Sender<(Request, oneshot::Sender<Result<(), SendError>>)>,
     handle: JoinHandle<()>,
-    res_rx: ReceiverStream<Result<Response, ReceiveError>>,
+    websocket_rx: ReceiverStream<Result<Response, ReceiveError>>,
 
     next_id: u64,
 
     params: RunParameters,
 
-    cmd_rx: ReceiverStream<Command>,
+    client_rx: ReceiverStream<Command>,
 
-    pending_pub: HashMap<u64, oneshot::Sender<Result<(), Either<SendError, ReceiveError>>>>,
+    pending_general: HashMap<u64, oneshot::Sender<Result<(), Either<SendError, ReceiveError>>>>,
     pending_sub: HashMap<u64, mpsc::Sender<Result<String, Either<SendError, ReceiveError>>>>,
     pending_signal: HashMap<u64, oneshot::Sender<Result<u64, Either<SendError, ReceiveError>>>>,
-    pending_barrier: HashMap<u64, oneshot::Sender<Result<(), Either<SendError, ReceiveError>>>>,
 }
 
 impl Drop for BackgroundTask {
@@ -79,30 +78,33 @@ impl Drop for BackgroundTask {
 }
 
 impl BackgroundTask {
-    pub async fn new(cmd_rx: mpsc::Receiver<Command>) -> Result<Self, Box<dyn std::error::Error>> {
-        let cmd_rx = ReceiverStream::new(cmd_rx);
+    pub async fn new(
+        client_rx: mpsc::Receiver<Command>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let client_rx = ReceiverStream::new(client_rx);
 
         let params = RunParameters::from_args();
 
-        let (req_tx, req_rx) = mpsc::channel(10);
-        let (res_tx, res_rx) = mpsc::channel(10);
+        let (websocket_tx, req_rx) = mpsc::channel(10);
+        let (res_tx, websocket_rx) = mpsc::channel(10);
 
         let web = WebsocketClient::new(res_tx, req_rx).await?;
 
-        let handle = tokio::spawn(web.run());
+        let handle = tokio::spawn(async move {
+            web.run().await;
+        });
 
-        let res_rx = ReceiverStream::new(res_rx);
+        let websocket_rx = ReceiverStream::new(websocket_rx);
 
         Ok(Self {
-            res_rx,
+            websocket_rx,
             next_id: 0,
             params,
-            cmd_rx,
-            req_tx,
-            pending_pub: Default::default(),
+            client_rx,
+            websocket_tx,
+            pending_general: Default::default(),
             pending_sub: Default::default(),
             pending_signal: Default::default(),
-            pending_barrier: Default::default(),
             handle,
         })
     }
@@ -137,13 +139,19 @@ impl BackgroundTask {
     pub async fn run(&mut self) {
         loop {
             tokio::select! {
-                res = self.res_rx.next() => match res {
+                res = self.websocket_rx.next() => match res {
                     Some(res) => self.response(res).await,
-                    None => return,
+                    None => {
+                        eprintln!("Web socket receiver dropped");
+                        return;
+                    },
                 },
-                cmd = self.cmd_rx.next() => match cmd {
+                cmd = self.client_rx.next() => match cmd {
                     Some(cmd) => self.command(cmd).await,
-                    None => return,
+                    None => {
+                        eprintln!("Client command receiver dropped");
+                        return;
+                    },
                 },
             }
         }
@@ -166,18 +174,21 @@ impl BackgroundTask {
                     request: RequestType::Publish { topic, payload },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender
                         .send(Err(Either::Left(e)))
                         .expect("receiver not dropped");
                 } else {
-                    self.pending_pub.insert(id, sender);
+                    self.pending_general.insert(id, sender);
                 }
             }
             Command::Subscribe { topic, stream } => {
@@ -189,13 +200,16 @@ impl BackgroundTask {
                     request: RequestType::Subscribe { topic },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     stream
                         .send(Err(Either::Left(e)))
                         .await
@@ -213,13 +227,16 @@ impl BackgroundTask {
                     request: RequestType::SignalEntry { state },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender
                         .send(Err(Either::Left(e)))
                         .expect("receiver not dropped");
@@ -240,18 +257,21 @@ impl BackgroundTask {
                     request: RequestType::Barrier { state, target },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender
                         .send(Err(Either::Left(e)))
                         .expect("receiver not dropped");
                 } else {
-                    self.pending_barrier.insert(id, sender);
+                    self.pending_general.insert(id, sender);
                 }
             }
             Command::WaitNetworkInitializedStart { sender } => {
@@ -269,18 +289,21 @@ impl BackgroundTask {
                     request: RequestType::Publish { topic, payload },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender
                         .send(Err(Either::Left(e)))
                         .expect("receiver not dropped");
                 } else {
-                    self.pending_pub.insert(id, sender);
+                    self.pending_general.insert(id, sender);
                 }
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
@@ -300,18 +323,21 @@ impl BackgroundTask {
                     },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender
                         .send(Err(Either::Left(e)))
                         .expect("receiver not dropped");
                 } else {
-                    self.pending_barrier.insert(id, sender);
+                    self.pending_general.insert(id, sender);
                 }
             }
             Command::WaitNetworkInitializedEnd { sender } => {
@@ -329,18 +355,21 @@ impl BackgroundTask {
                     request: RequestType::Publish { topic, payload },
                 };
 
-                let (tx, rx) = oneshot::channel();
+                let (tx, websocket_rx) = oneshot::channel();
 
                 let msg = (request, tx);
 
-                self.req_tx.send(msg).await.expect("receiver not dropped");
+                self.websocket_tx
+                    .send(msg)
+                    .await
+                    .expect("receiver not dropped");
 
-                if let Err(e) = rx.await.expect("sender not dropped") {
+                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender
                         .send(Err(Either::Left(e)))
                         .expect("receiver not dropped");
                 } else {
-                    self.pending_pub.insert(id, sender);
+                    self.pending_general.insert(id, sender);
                 }
             }
         }
@@ -363,18 +392,24 @@ impl BackgroundTask {
             ResponseType::SignalEntry { seq } => {
                 let sender = match self.pending_signal.remove(&idx) {
                     Some(sender) => sender,
-                    None => return,
+                    None => {
+                        eprintln!("Signal response {} not found", idx);
+                        return;
+                    }
                 };
 
-                let _ = sender.send(Ok(seq));
+                sender.send(Ok(seq)).expect("receiver not dropped");
             }
             ResponseType::Publish { .. } => {
-                let sender = match self.pending_pub.remove(&idx) {
+                let sender = match self.pending_general.remove(&idx) {
                     Some(sender) => sender,
-                    None => return,
+                    None => {
+                        eprintln!("Publish response {} not found", idx);
+                        return;
+                    }
                 };
 
-                let _ = sender.send(Ok(()));
+                sender.send(Ok(())).expect("receiver not dropped");
             }
             ResponseType::Subscribe(msg) => {
                 let stream = match self.pending_sub.remove(&idx) {
@@ -386,12 +421,32 @@ impl BackgroundTask {
                     return;
                 }
 
-                stream.send(Ok(msg)).await.unwrap();
+                stream.send(Ok(msg)).await.expect("stream not dropped");
 
                 self.pending_sub.insert(idx, stream);
             }
             ResponseType::Error(error) => {
-                //TODO
+                if let Some(sender) = self.pending_signal.remove(&idx) {
+                    sender
+                        .send(Err(Either::Right(ReceiveError::Sync(error))))
+                        .expect("receiver not dropped");
+                    return;
+                }
+
+                if let Some(sender) = self.pending_general.remove(&idx) {
+                    sender
+                        .send(Err(Either::Right(ReceiveError::Sync(error))))
+                        .expect("receiver not dropped");
+                    return;
+                }
+
+                if let Some(stream) = self.pending_sub.remove(&idx) {
+                    stream
+                        .send(Err(Either::Right(ReceiveError::Sync(error))))
+                        .await
+                        .expect("receiver not dropped");
+                    return;
+                }
             }
         }
     }
