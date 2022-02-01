@@ -8,23 +8,19 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
-use crate::{
-    errors::{ReceiveError, SendError},
-    requests::Request,
-    responses::Response,
-};
+use crate::{errors::Error, requests::Request, responses::Response};
 
 pub struct WebsocketClient<'a> {
     client: Client<'a, Compat<TcpStream>>,
 
-    sender: mpsc::Sender<Result<Response, ReceiveError>>,
-    receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), SendError>>)>,
+    sender: mpsc::Sender<Result<Response, Error>>,
+    receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), Error>>)>,
 }
 
 impl<'a> WebsocketClient<'a> {
     pub async fn new(
-        sender: mpsc::Sender<Result<Response, ReceiveError>>,
-        receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), SendError>>)>,
+        sender: mpsc::Sender<Result<Response, Error>>,
+        receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), Error>>)>,
     ) -> Result<WebsocketClient<'a>, Box<dyn std::error::Error>> {
         let socket = tokio::net::TcpStream::connect(("testground-sync-service", 5050)).await?;
 

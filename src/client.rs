@@ -5,10 +5,9 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::Stream;
-use tokio_util::either::Either;
 
 use crate::background::{BackgroundTask, Command};
-use crate::errors::{ReceiveError, SendError};
+use crate::errors::Error;
 use crate::events::Event;
 
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
@@ -40,7 +39,7 @@ impl Client {
         &self,
         topic: impl Into<Cow<'static, str>>,
         payload: Vec<u8>,
-    ) -> Result<(), Either<SendError, ReceiveError>> {
+    ) -> Result<(), Error> {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::Publish {
@@ -57,7 +56,7 @@ impl Client {
     pub async fn subscribe(
         &self,
         topic: impl Into<Cow<'static, str>>,
-    ) -> impl Stream<Item = Result<String, Either<SendError, ReceiveError>>> {
+    ) -> impl Stream<Item = Result<String, Error>> {
         let (stream, out) = mpsc::channel(10);
 
         let cmd = Command::Subscribe {
@@ -74,7 +73,7 @@ impl Client {
         &self,
         state: impl Into<Cow<'static, str>>,
         target: u64,
-    ) -> Result<u64, Either<SendError, ReceiveError>> {
+    ) -> Result<u64, Error> {
         let (sender, receiver) = oneshot::channel();
 
         let state = state.into().into_owned();
@@ -103,10 +102,7 @@ impl Client {
         Ok(res)
     }
 
-    pub async fn signal(
-        &self,
-        state: impl Into<Cow<'static, str>>,
-    ) -> Result<u64, Either<SendError, ReceiveError>> {
+    pub async fn signal(&self, state: impl Into<Cow<'static, str>>) -> Result<u64, Error> {
         let (sender, receiver) = oneshot::channel();
 
         let state = state.into().into_owned();
@@ -121,7 +117,7 @@ impl Client {
         &self,
         state: impl Into<Cow<'static, str>>,
         target: u64,
-    ) -> Result<(), Either<SendError, ReceiveError>> {
+    ) -> Result<(), Error> {
         let (sender, receiver) = oneshot::channel();
 
         let state = state.into().into_owned();
@@ -136,7 +132,7 @@ impl Client {
         receiver.await.expect("sender not dropped")
     }
 
-    pub async fn wait_network_initialized(&self) -> Result<(), Either<SendError, ReceiveError>> {
+    pub async fn wait_network_initialized(&self) -> Result<(), Error> {
         // Event
         let (sender, receiver) = oneshot::channel();
 

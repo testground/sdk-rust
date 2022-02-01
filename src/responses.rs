@@ -4,6 +4,8 @@ use serde::Deserialize;
 pub struct Response {
     pub id: String,
 
+    pub error: Option<String>,
+
     #[serde(flatten)]
     pub response: ResponseType,
 }
@@ -16,6 +18,4 @@ pub enum ResponseType {
     Publish { seq: u64 },
     #[serde(rename = "subscribe")]
     Subscribe(String),
-    #[serde(rename = "error")]
-    Error(String),
 }
