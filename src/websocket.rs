@@ -1,7 +1,4 @@
-use soketto::{
-    handshake::{Client, ServerResponse},
-    Data,
-};
+use soketto::handshake::{Client, ServerResponse};
 
 use tokio::{
     net::TcpStream,
@@ -11,7 +8,11 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
-use crate::{errors::Error, requests::Request, responses::Response};
+use crate::{
+    errors::Error,
+    requests::Request,
+    responses::{RawResponse, Response},
+};
 
 pub struct WebsocketClient<'a> {
     client: Client<'a, Compat<TcpStream>>,
@@ -76,7 +77,13 @@ impl<'a> WebsocketClient<'a> {
         loop {
             tokio::select! {
                 res = socket_packets.next() => {
-                    let res: Result<(Data, Vec<u8>), soketto::connection::Error> = res.unwrap();//infinite stream
+                    let res = match res {
+                        Some(res) => res,
+                        None => {
+                            eprintln!("Web socket response receiver dropped");
+                            return;
+                        },
+                    };
 
                     if let Err(e) = res {
                         self.sender
@@ -88,22 +95,12 @@ impl<'a> WebsocketClient<'a> {
 
                     let (_, buf) = res.unwrap();
 
-                    println!("Raw response: {:?}", std::str::from_utf8(&buf));
+                    let msg = serde_json::from_slice::<RawResponse>(&buf).expect("Response Deserialization");
 
-                    match serde_json::from_slice(&buf) {
-                        Ok(msg) => {
-                            self.sender
-                                .send(Ok(msg))
-                                .await
-                                .expect("receiver not dropped");
-                        }
-                        Err(e) => {
-                            self.sender
-                                .send(Err(e.into()))
-                                .await
-                                .expect("receiver not dropped");
-                        }
-                    }
+                    self.sender
+                        .send(Ok(msg.into()))
+                        .await
+                        .expect("receiver not dropped");
                 },
                 req = self.receiver.recv() => {
                     let (req, sender) = match req {
@@ -114,15 +111,7 @@ impl<'a> WebsocketClient<'a> {
                         },
                     };
 
-                    let json = match serde_json::to_string(&req) {
-                        Ok(j) => j,
-                        Err(e) => {
-                            sender.send(Err(e.into())).expect("receiver not dropped");
-                            continue;
-                        }
-                    };
-
-                    println!("Raw request: {}", json);
+                    let json = serde_json::to_string(&req).expect("Request Serialization");
 
                     if let Err(e) = tx.send_text_owned(json).await {
                         sender.send(Err(e.into())).expect("receiver not dropped");

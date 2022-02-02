@@ -22,7 +22,7 @@ pub enum Command {
     Publish {
         topic: String,
         payload: Vec<u8>,
-        sender: oneshot::Sender<Result<(), Error>>,
+        sender: oneshot::Sender<Result<u64, Error>>,
     },
     Subscribe {
         topic: String,
@@ -41,7 +41,7 @@ pub enum Command {
     },
 
     WaitNetworkInitializedStart {
-        sender: oneshot::Sender<Result<(), Error>>,
+        sender: oneshot::Sender<Result<u64, Error>>,
     },
 
     WaitNetworkInitializedBarrier {
@@ -49,7 +49,7 @@ pub enum Command {
     },
 
     WaitNetworkInitializedEnd {
-        sender: oneshot::Sender<Result<(), Error>>,
+        sender: oneshot::Sender<Result<u64, Error>>,
     },
 }
 
@@ -64,9 +64,9 @@ pub struct BackgroundTask {
 
     client_rx: ReceiverStream<Command>,
 
-    pending_general: HashMap<u64, oneshot::Sender<Result<(), Error>>>,
+    pending_publish_signal: HashMap<u64, oneshot::Sender<Result<u64, Error>>>,
     pending_sub: HashMap<u64, mpsc::Sender<Result<String, Error>>>,
-    pending_signal: HashMap<u64, oneshot::Sender<Result<u64, Error>>>,
+    pending_barrier: HashMap<u64, oneshot::Sender<Result<(), Error>>>,
 }
 
 impl Drop for BackgroundTask {
@@ -100,9 +100,9 @@ impl BackgroundTask {
             params,
             client_rx,
             websocket_tx,
-            pending_general: Default::default(),
+            pending_barrier: Default::default(),
             pending_sub: Default::default(),
-            pending_signal: Default::default(),
+            pending_publish_signal: Default::default(),
             handle,
         })
     }
@@ -184,7 +184,7 @@ impl BackgroundTask {
                 if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender.send(Err(e)).expect("receiver not dropped");
                 } else {
-                    self.pending_general.insert(id, sender);
+                    self.pending_publish_signal.insert(id, sender);
                 }
             }
             Command::Subscribe { topic, stream } => {
@@ -232,7 +232,7 @@ impl BackgroundTask {
                 if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender.send(Err(e)).expect("receiver not dropped");
                 } else {
-                    self.pending_signal.insert(id, sender);
+                    self.pending_publish_signal.insert(id, sender);
                 }
             }
             Command::Barrier {
@@ -260,7 +260,7 @@ impl BackgroundTask {
                 if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender.send(Err(e)).expect("receiver not dropped");
                 } else {
-                    self.pending_general.insert(id, sender);
+                    self.pending_barrier.insert(id, sender);
                 }
             }
             Command::WaitNetworkInitializedStart { sender } => {
@@ -290,7 +290,7 @@ impl BackgroundTask {
                 if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender.send(Err(e)).expect("receiver not dropped");
                 } else {
-                    self.pending_general.insert(id, sender);
+                    self.pending_publish_signal.insert(id, sender);
                 }
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
@@ -322,7 +322,7 @@ impl BackgroundTask {
                 if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender.send(Err(e)).expect("receiver not dropped");
                 } else {
-                    self.pending_general.insert(id, sender);
+                    self.pending_barrier.insert(id, sender);
                 }
             }
             Command::WaitNetworkInitializedEnd { sender } => {
@@ -352,7 +352,7 @@ impl BackgroundTask {
                 if let Err(e) = websocket_rx.await.expect("sender not dropped") {
                     sender.send(Err(e)).expect("receiver not dropped");
                 } else {
-                    self.pending_general.insert(id, sender);
+                    self.pending_publish_signal.insert(id, sender);
                 }
             }
         }
@@ -367,75 +367,71 @@ impl BackgroundTask {
             }
         };
 
-        let Response {
-            id,
-            error,
-            response,
-        } = res;
+        let Response { id, response } = res;
 
         let idx = id.parse().unwrap();
 
-        if let Some(response) = response {
-            match response {
-                ResponseType::SignalEntry { seq } => {
-                    let sender = match self.pending_signal.remove(&idx) {
-                        Some(sender) => sender,
-                        None => {
-                            eprintln!("Signal response {} not found", idx);
-                            return;
-                        }
-                    };
-
-                    sender.send(Ok(seq)).expect("receiver not dropped");
+        match response {
+            ResponseType::Error(error) => {
+                if let Some(sender) = self.pending_publish_signal.remove(&idx) {
+                    sender
+                        .send(Err(Error::SyncService(error)))
+                        .expect("receiver not dropped");
+                    return;
                 }
-                ResponseType::Publish { .. } => {
-                    let sender = match self.pending_general.remove(&idx) {
-                        Some(sender) => sender,
-                        None => {
-                            eprintln!("Publish response {} not found", idx);
-                            return;
-                        }
-                    };
 
-                    sender.send(Ok(())).expect("receiver not dropped");
+                if let Some(sender) = self.pending_barrier.remove(&idx) {
+                    sender
+                        .send(Err(Error::SyncService(error)))
+                        .expect("receiver not dropped");
+                    return;
                 }
-                ResponseType::Subscribe(msg) => {
-                    let stream = match self.pending_sub.remove(&idx) {
-                        Some(sender) => sender,
-                        None => return,
-                    };
 
-                    if stream.is_closed() {
+                if let Some(sender) = self.pending_sub.remove(&idx) {
+                    sender
+                        .send(Err(Error::SyncService(error)))
+                        .await
+                        .expect("receiver not dropped");
+                    return;
+                }
+            }
+            ResponseType::Subscribe(msg) => {
+                let stream = match self.pending_sub.remove(&idx) {
+                    Some(sender) => sender,
+                    None => return,
+                };
+
+                if stream.is_closed() {
+                    return;
+                }
+
+                stream.send(Ok(msg)).await.expect("stream not dropped");
+
+                self.pending_sub.insert(idx, stream);
+                return;
+            }
+            ResponseType::SignalEntry { seq } => {
+                let sender = match self.pending_publish_signal.remove(&idx) {
+                    Some(sender) => sender,
+                    None => {
+                        eprintln!("Signal response {} not found", idx);
                         return;
                     }
+                };
 
-                    stream.send(Ok(msg)).await.expect("stream not dropped");
-
-                    self.pending_sub.insert(idx, stream);
-                }
-            }
-        }
-
-        if let Some(error) = error {
-            if let Some(sender) = self.pending_general.remove(&idx) {
-                sender
-                    .send(Err(Error::SyncService(error)))
-                    .expect("receiver not dropped");
+                sender.send(Ok(seq)).expect("receiver not dropped");
                 return;
             }
+            ResponseType::Publish { seq } => {
+                let sender = match self.pending_publish_signal.remove(&idx) {
+                    Some(sender) => sender,
+                    None => {
+                        eprintln!("Publish response {} not found", idx);
+                        return;
+                    }
+                };
 
-            if let Some(sender) = self.pending_signal.remove(&idx) {
-                sender
-                    .send(Err(Error::SyncService(error)))
-                    .expect("receiver not dropped");
-                return;
-            }
-
-            if let Some(sender) = self.pending_sub.remove(&idx) {
-                sender
-                    .send(Err(Error::SyncService(error)))
-                    .await
-                    .expect("receiver not dropped");
+                sender.send(Ok(seq)).expect("receiver not dropped");
                 return;
             }
         }

@@ -1,21 +1,90 @@
 use serde::Deserialize;
+use serde_with::rust::string_empty_as_none;
 
 #[derive(Deserialize, Debug)]
-pub struct Response {
-    pub id: String,
-
-    pub error: Option<String>,
-
-    #[serde(flatten)]
-    pub response: Option<ResponseType>,
+pub struct SignalEntry {
+    pub seq: u64,
 }
 
 #[derive(Deserialize, Debug)]
+pub struct Publish {
+    pub seq: u64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct RawResponse {
+    pub id: String,
+
+    #[serde(with = "string_empty_as_none")]
+    pub error: Option<String>,
+
+    #[serde(with = "string_empty_as_none")]
+    pub subscribe: Option<String>,
+
+    pub signal_entry: Option<SignalEntry>,
+
+    pub publish: Option<Publish>,
+}
+
+#[derive(Debug)]
 pub enum ResponseType {
-    #[serde(rename = "signal_entry")]
     SignalEntry { seq: u64 },
-    #[serde(rename = "publish")]
     Publish { seq: u64 },
-    #[serde(rename = "subscribe")]
     Subscribe(String),
+    Error(String),
+}
+
+#[derive(Debug)]
+pub struct Response {
+    pub id: String,
+    pub response: ResponseType,
+}
+
+impl From<RawResponse> for Response {
+    fn from(raw_response: RawResponse) -> Self {
+        let RawResponse {
+            id,
+            error,
+            subscribe,
+            signal_entry,
+            publish,
+        } = raw_response;
+
+        let response = match (error, subscribe, signal_entry, publish) {
+            (Some(error), None, None, None) => ResponseType::Error(error),
+            (None, Some(msg), None, None) => ResponseType::Subscribe(msg),
+            (None, None, Some(signal), None) => ResponseType::SignalEntry { seq: signal.seq },
+            (None, None, None, Some(publish)) => ResponseType::Publish { seq: publish.seq },
+            (error, subscribe, signal_entry, publish) => {
+                panic!(
+                    "Incompatible Raw Response {:?}",
+                    RawResponse {
+                        id,
+                        error,
+                        subscribe,
+                        signal_entry,
+                        publish,
+                    }
+                );
+            }
+        };
+
+        Self { id, response }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serde_test() {
+        let raw_response = "{\"id\":\"0\",\"error\":\"\",\"subscribe\":\"\",\"publish\":{\"seq\":1},\"signal_entry\":null}";
+
+        let response: RawResponse = serde_json::from_str(raw_response).unwrap();
+
+        let response: Response = response.into();
+
+        println!("{:?}", response);
+    }
 }

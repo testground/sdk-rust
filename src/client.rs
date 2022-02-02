@@ -39,7 +39,7 @@ impl Client {
         &self,
         topic: impl Into<Cow<'static, str>>,
         payload: Vec<u8>,
-    ) -> Result<(), Error> {
+    ) -> Result<u64, Error> {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::Publish {
@@ -166,6 +166,8 @@ impl Client {
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 
-        receiver.await.expect("sender not dropped")
+        receiver.await.expect("sender not dropped")?;
+
+        Ok(())
     }
 }
