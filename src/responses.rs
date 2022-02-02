@@ -32,6 +32,7 @@ pub enum ResponseType {
     Publish { seq: u64 },
     Subscribe(String),
     Error(String),
+    Barrier,
 }
 
 #[derive(Debug)]
@@ -51,6 +52,7 @@ impl From<RawResponse> for Response {
         } = raw_response;
 
         let response = match (error, subscribe, signal_entry, publish) {
+            (None, None, None, None) => ResponseType::Barrier,
             (Some(error), None, None, None) => ResponseType::Error(error),
             (None, Some(msg), None, None) => ResponseType::Subscribe(msg),
             (None, None, Some(signal), None) => ResponseType::SignalEntry { seq: signal.seq },

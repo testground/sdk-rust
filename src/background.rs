@@ -434,6 +434,18 @@ impl BackgroundTask {
                 sender.send(Ok(seq)).expect("receiver not dropped");
                 return;
             }
+            ResponseType::Barrier => {
+                let sender = match self.pending_barrier.remove(&idx) {
+                    Some(sender) => sender,
+                    None => {
+                        eprintln!("Barrier response {} not found", idx);
+                        return;
+                    }
+                };
+
+                sender.send(Ok(())).expect("receiver not dropped");
+                return;
+            }
         }
     }
 }
