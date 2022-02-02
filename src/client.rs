@@ -8,7 +8,6 @@ use tokio_stream::Stream;
 
 use crate::background::{BackgroundTask, Command};
 use crate::errors::Error;
-use crate::events::Event;
 
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
 pub struct Client {
@@ -38,13 +37,13 @@ impl Client {
     pub async fn publish(
         &self,
         topic: impl Into<Cow<'static, str>>,
-        payload: Vec<u8>,
+        payload: impl Into<Cow<'static, str>>,
     ) -> Result<u64, Error> {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::Publish {
             topic: topic.into().into_owned(),
-            payload,
+            payload: payload.into().into_owned(),
             sender,
         };
 
@@ -150,14 +149,6 @@ impl Client {
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 
         receiver.await.expect("sender not dropped")?;
-
-        // Message
-        println!(
-            "{:?}",
-            Event::Message {
-                message: "network initialisation successful".to_owned(),
-            }
-        );
 
         // Event
         let (sender, receiver) = oneshot::channel();

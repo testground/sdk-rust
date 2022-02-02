@@ -21,7 +21,7 @@ use crate::{
 pub enum Command {
     Publish {
         topic: String,
-        payload: Vec<u8>,
+        payload: String,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
     Subscribe {
@@ -270,7 +270,7 @@ impl BackgroundTask {
                 };
 
                 let topic = self.contextualize_event();
-                let payload = serde_json::to_vec(&event).expect("Serializable Event");
+                let payload = serde_json::to_string(&event).expect("Serializable Event");
 
                 let request = Request {
                     id: id.to_string(),
@@ -332,7 +332,7 @@ impl BackgroundTask {
                 };
 
                 let topic = self.contextualize_event();
-                let payload = serde_json::to_vec(&event).expect("Serializable Event");
+                let payload = serde_json::to_string(&event).expect("Serializable Event");
 
                 let request = Request {
                     id: id.to_string(),

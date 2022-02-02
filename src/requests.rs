@@ -17,7 +17,7 @@ pub enum RequestType {
     #[serde(rename = "barrier")]
     Barrier { state: String, target: u64 },
     #[serde(rename = "publish")]
-    Publish { topic: String, payload: Vec<u8> },
+    Publish { topic: String, payload: String },
     #[serde(rename = "subscribe")]
     Subscribe { topic: String },
 }
