@@ -88,12 +88,7 @@ impl<'a> WebsocketClient<'a> {
 
                     let (_, buf) = res.unwrap();
 
-                    #[cfg(debug_assertions)]
-                    {
-                        let string_res = String::from_utf8_lossy(&buf);
-
-                        println!("Raw response: {}", string_res);
-                    }
+                    println!("Raw response: {:?}", std::str::from_utf8(&buf));
 
                     match serde_json::from_slice(&buf) {
                         Ok(msg) => {
@@ -127,7 +122,9 @@ impl<'a> WebsocketClient<'a> {
                         }
                     };
 
-                    if let Err(e) = tx.send_text(json).await {
+                    println!("Raw request: {}", json);
+
+                    if let Err(e) = tx.send_text_owned(json).await {
                         sender.send(Err(e.into())).expect("receiver not dropped");
                         continue;
                     }
