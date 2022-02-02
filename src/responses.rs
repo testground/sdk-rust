@@ -53,8 +53,16 @@ impl From<RawResponse> for Response {
 
         let response = match (error, subscribe, signal_entry, publish) {
             (None, None, None, None) => ResponseType::Barrier,
-            (Some(error), None, None, None) => ResponseType::Error(error),
-            (None, Some(msg), None, None) => ResponseType::Subscribe(msg),
+            (Some(error), None, None, None) => {
+                //Hack to remove extra escape characters
+                let error = serde_json::from_str(&error).expect("JSON Deserialization");
+                ResponseType::Error(error)
+            }
+            (None, Some(msg), None, None) => {
+                //Hack to remove extra escape characters
+                let msg = serde_json::from_str(&msg).expect("JSON Deserialization");
+                ResponseType::Subscribe(msg)
+            }
             (None, None, Some(signal), None) => ResponseType::SignalEntry { seq: signal.seq },
             (None, None, None, Some(publish)) => ResponseType::Publish { seq: publish.seq },
             (error, subscribe, signal_entry, publish) => {
@@ -88,5 +96,18 @@ mod tests {
         let response: Response = response.into();
 
         println!("{:?}", response);
+    }
+
+    #[test]
+    fn pubsub_desrialization() {
+        let msg = String::from(
+            r#""12D3KooWBs3iMJr7QCXFDiXeSQv8WxZdHZ4FABjw6gqHN7JbsC1W\n/ip4/16.0.0.4/tcp/4001""#,
+        );
+
+        println!("Before {}", msg);
+
+        let string: String = serde_json::from_str(&msg).unwrap();
+
+        println!("After {}", string);
     }
 }
