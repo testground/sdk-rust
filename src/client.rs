@@ -1,13 +1,19 @@
 use std::borrow::Cow;
 
-use tokio::sync::mpsc::{self, channel, Sender};
-use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::Stream;
+use tokio::{
+    sync::{
+        mpsc::{self, channel, Sender},
+        oneshot,
+    },
+    task::JoinHandle,
+};
+use tokio_stream::{wrappers::ReceiverStream, Stream};
 
-use crate::background::{BackgroundTask, Command};
-use crate::errors::Error;
+use crate::{
+    background::{BackgroundTask, Command},
+    errors::Error,
+    network_conf::NetworkConfiguration,
+};
 
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
 pub struct Client {
@@ -154,6 +160,35 @@ impl Client {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::WaitNetworkInitializedEnd { sender };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        receiver.await.expect("sender not dropped")?;
+
+        Ok(())
+    }
+
+    pub async fn configure_network(&self, config: NetworkConfiguration) -> Result<(), Error> {
+        // Publish
+        let (sender, receiver) = oneshot::channel();
+
+        let state = config.callback_state.clone();
+        let target = config.callback_target;
+
+        let cmd = Command::NetworkShaping { sender, config };
+
+        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+
+        receiver.await.expect("sender not dropped")?;
+
+        // Barrier
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::Barrier {
+            state,
+            target,
+            sender,
+        };
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 

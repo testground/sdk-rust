@@ -10,4 +10,6 @@ pub enum Error {
     FromUtf8(#[from] std::string::FromUtf8Error),
     #[error("Sync-Service: {0}")]
     SyncService(String),
+    #[error("The SideCar is not running")]
+    SideCar,
 }

@@ -15,6 +15,7 @@ use crate::{
     requests::{Request, RequestType},
     responses::{Response, ResponseType},
     websocket::WebsocketClient,
+    NetworkConfiguration,
 };
 
 #[derive(Debug)]
@@ -49,6 +50,11 @@ pub enum Command {
     },
 
     WaitNetworkInitializedEnd {
+        sender: oneshot::Sender<Result<u64, Error>>,
+    },
+
+    NetworkShaping {
+        config: NetworkConfiguration,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
 }
@@ -175,77 +181,17 @@ impl BackgroundTask {
             } => {
                 let topic = self.contextualize_topic(&topic);
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::Publish { topic, payload },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    sender.send(Err(e)).expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::PublishOrSignal { sender });
-                }
+                self.publish(id, topic, payload, sender).await
             }
             Command::Subscribe { topic, stream } => {
                 let topic = self.contextualize_topic(&topic);
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::Subscribe { topic },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    stream.send(Err(e)).await.expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::Subscribe { stream });
-                }
+                self.subscribe(id, topic, stream).await
             }
             Command::Signal { state, sender } => {
                 let state = self.contextualize_state(&state);
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::SignalEntry { state },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    sender.send(Err(e)).expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::PublishOrSignal { sender });
-                }
+                self.signal(id, state, sender).await
             }
             Command::Barrier {
                 state,
@@ -254,27 +200,7 @@ impl BackgroundTask {
             } => {
                 let state = self.contextualize_state(&state);
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::Barrier { state, target },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    sender.send(Err(e)).expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::Barrier { sender });
-                }
+                self.barrier(id, state, target, sender).await
             }
             Command::WaitNetworkInitializedStart { sender } => {
                 let event = Event::StageStart {
@@ -283,62 +209,22 @@ impl BackgroundTask {
                 };
 
                 let topic = self.contextualize_event();
-                let payload = serde_json::to_string(&event).expect("Serializable Event");
+                let payload = serde_json::to_string(&event).expect("Event Serialization");
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::Publish { topic, payload },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    sender.send(Err(e)).expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::PublishOrSignal { sender });
-                }
+                self.publish(id, topic, payload, sender).await
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
                 if !self.params.test_sidecar {
-                    sender.send(Ok(())).expect("receiver not dropped");
+                    sender
+                        .send(Err(Error::SideCar))
+                        .expect("receiver not dropped");
                     return;
                 }
 
                 let state = self.contextualize_state("network-initialized");
+                let target = self.params.test_instance_count;
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::Barrier {
-                        state,
-                        target: self.params.test_instance_count,
-                    },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    sender.send(Err(e)).expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::Barrier { sender });
-                }
+                self.barrier(id, state, target, sender).await;
             }
             Command::WaitNetworkInitializedEnd { sender } => {
                 let event = Event::StageEnd {
@@ -347,30 +233,143 @@ impl BackgroundTask {
                 };
 
                 let topic = self.contextualize_event();
-                let payload = serde_json::to_string(&event).expect("Serializable Event");
+                let payload = serde_json::to_string(&event).expect("Event Serialization");
 
-                let request = Request {
-                    id: id.to_string(),
-                    is_cancel: false,
-                    request: RequestType::Publish { topic, payload },
-                };
-
-                let (tx, websocket_rx) = oneshot::channel();
-
-                let msg = (request, tx);
-
-                self.websocket_tx
-                    .send(msg)
-                    .await
-                    .expect("receiver not dropped");
-
-                if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-                    sender.send(Err(e)).expect("receiver not dropped");
-                } else {
-                    self.pending_cmd
-                        .insert(id, PendingRequest::PublishOrSignal { sender });
-                }
+                self.publish(id, topic, payload, sender).await
             }
+            Command::NetworkShaping { config, sender } => {
+                if !self.params.test_sidecar {
+                    sender
+                        .send(Err(Error::SideCar))
+                        .expect("receiver not dropped");
+                    return;
+                }
+
+                let topic = format!("network:{}", self.params.hostname);
+
+                let topic = self.contextualize_topic(&topic);
+                let payload = serde_json::to_string(&config).expect("Config Serialization");
+
+                self.publish(id, topic, payload, sender).await
+            }
+        }
+    }
+
+    async fn publish(
+        &mut self,
+        id: u64,
+        topic: String,
+        payload: String,
+        sender: oneshot::Sender<Result<u64, Error>>,
+    ) {
+        let request = Request {
+            id: id.to_string(),
+            is_cancel: false,
+            request: RequestType::Publish { topic, payload },
+        };
+
+        let (tx, websocket_rx) = oneshot::channel();
+
+        let msg = (request, tx);
+
+        self.websocket_tx
+            .send(msg)
+            .await
+            .expect("receiver not dropped");
+
+        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+            sender.send(Err(e)).expect("receiver not dropped");
+        } else {
+            self.pending_cmd
+                .insert(id, PendingRequest::PublishOrSignal { sender });
+        }
+    }
+
+    async fn subscribe(
+        &mut self,
+        id: u64,
+        topic: String,
+        stream: mpsc::Sender<Result<String, Error>>,
+    ) {
+        let request = Request {
+            id: id.to_string(),
+            is_cancel: false,
+            request: RequestType::Subscribe { topic },
+        };
+
+        let (tx, websocket_rx) = oneshot::channel();
+
+        let msg = (request, tx);
+
+        self.websocket_tx
+            .send(msg)
+            .await
+            .expect("receiver not dropped");
+
+        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+            stream.send(Err(e)).await.expect("receiver not dropped");
+        } else {
+            self.pending_cmd
+                .insert(id, PendingRequest::Subscribe { stream });
+        }
+    }
+
+    async fn signal(
+        &mut self,
+        id: u64,
+        state: String,
+        sender: oneshot::Sender<Result<u64, Error>>,
+    ) {
+        let request = Request {
+            id: id.to_string(),
+            is_cancel: false,
+            request: RequestType::SignalEntry { state },
+        };
+
+        let (tx, websocket_rx) = oneshot::channel();
+
+        let msg = (request, tx);
+
+        self.websocket_tx
+            .send(msg)
+            .await
+            .expect("receiver not dropped");
+
+        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+            sender.send(Err(e)).expect("receiver not dropped");
+        } else {
+            self.pending_cmd
+                .insert(id, PendingRequest::PublishOrSignal { sender });
+        }
+    }
+
+    async fn barrier(
+        &mut self,
+        id: u64,
+        state: String,
+        target: u64,
+        sender: oneshot::Sender<Result<(), Error>>,
+    ) {
+        let request = Request {
+            id: id.to_string(),
+            is_cancel: false,
+            request: RequestType::Barrier { state, target },
+        };
+
+        let (tx, websocket_rx) = oneshot::channel();
+
+        let msg = (request, tx);
+
+        self.websocket_tx
+            .send(msg)
+            .await
+            .expect("receiver not dropped");
+
+        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+            sender.send(Err(e)).expect("receiver not dropped");
+        } else {
+            self.pending_cmd
+                .insert(id, PendingRequest::Barrier { sender });
         }
     }
 

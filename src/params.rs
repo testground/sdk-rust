@@ -51,7 +51,7 @@ pub struct RunParameters {
     pub test_disable_metrics: Option<bool>, // TEST_DISABLE_METRICS: false
 
     #[structopt(env)]
-    pub hostname: Option<String>, // HOSTNAME: e6f4cc8fc147
+    pub hostname: String, // HOSTNAME: e6f4cc8fc147
     #[structopt(env)]
     pub influxdb_url: Option<String>, // INFLUXDB_URL: http://testground-influxdb:8086
     #[structopt(env)]
