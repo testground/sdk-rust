@@ -11,11 +11,11 @@ use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use crate::{
     errors::Error,
     events::Event,
+    network_conf::NetworkConfiguration,
     params::RunParameters,
     requests::{Request, RequestType},
     responses::{Response, ResponseType},
     websocket::WebsocketClient,
-    NetworkConfiguration,
 };
 
 #[derive(Debug)]
