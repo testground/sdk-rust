@@ -1,27 +1,29 @@
 #![allow(dead_code)]
 
-use std::{net::Ipv4Addr, time::Duration};
-
-use pnet::ipnetwork::IpNetwork;
+use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use serde::Serialize;
 
 #[derive(Serialize, Debug)]
 pub enum FilterAction {
-    Accept,
-    Reject,
-    Drop,
+    Accept = 0,
+    Reject = 1,
+    Drop = 2,
 }
 
 #[derive(Serialize, Debug)]
 /// LinkShape defines how traffic should be shaped.
 pub struct LinkShape {
-    /// Latency is the egress latency
-    pub latency: Duration,
+    /// Latency is the egress latency.
+    ///
+    /// Egg; 10s, 50ms, etc...
+    pub latency: String,
 
-    /// Jitter is the egress jitter
-    pub jitter: Duration,
+    /// Jitter is the egress jitter.
+    ///
+    /// Egg; 10s, 50ms, etc...
+    pub jitter: String,
 
-    /// Bandwidth is egress bytes per second
+    /// Bandwidth is egress bytes per second.
     pub bandwidth: u64,
 
     /// Drop all inbound traffic.
@@ -57,17 +59,26 @@ pub struct LinkShape {
 #[derive(Serialize, Debug)]
 /// LinkRule applies a LinkShape to a subnet.
 pub struct LinkRule {
+    #[serde(flatten)]
     pub link_shape: LinkShape,
 
-    #[serde(rename = "Subnet")]
-    pub sub_net: IpNetwork,
+    pub subnet: IpNetwork,
+}
+
+pub const DEAFULT_DATA_NETWORK: &str = "default";
+
+#[derive(Serialize, Debug)]
+pub enum RoutingPolicyType {
+    #[serde(rename = "allow_all")]
+    AllowAll,
+    #[serde(rename = "deny_all")]
+    DenyAll,
 }
 
 /// NetworkConfiguration specifies how a node's network should be configured.
 #[derive(Serialize, Debug)]
 pub struct NetworkConfiguration {
-    /// Network is the name of the network to configure
-    #[serde(rename = "Network")]
+    /// Network is the name of the network to configure.
     pub network: String,
 
     /// IPv4 and IPv6 set the IP addresses of this network device. If
@@ -79,31 +90,70 @@ pub struct NetworkConfiguration {
     ///
     /// TODO: IPv6 is currently not supported.
     #[serde(rename = "IPv4")]
-    pub ip_v4: Ipv4Addr,
+    pub ipv4: Option<Ipv4Network>,
 
     /// Enable enables this network device.
-    #[serde(rename = "Enable")]
     pub enable: bool,
 
     /// Default is the default link shaping rule.
-    #[serde(rename = "Default")]
     pub default: LinkShape,
 
     /// Rules defines how traffic should be shaped to different subnets.
     ///
     /// TODO: This is not implemented.
-    #[serde(rename = "Rules")]
     pub rules: Vec<LinkRule>,
 
     /// CallbackState will be signalled when the link changes are applied.
     ///
     /// Nodes can use the same state to wait for _all_ or a subset of nodes to
     /// enter the desired network state. See CallbackTarget.
-    #[serde(rename = "State")]
     pub callback_state: String,
 
     /// CallbackTarget is the amount of instances that will have needed to signal
     /// on the Callback state to consider the configuration operation a success.
     #[serde(rename = "-")]
     pub callback_target: u64,
+
+    /// RoutingPolicy defines the data routing policy of a certain node. This affects
+    /// external networks other than the network 'Default', e.g., external Internet
+    /// access.
+    pub routing_policy: RoutingPolicyType,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+    use durationfmt::to_string;
+
+    #[test]
+    fn serde_test() {
+        let network_conf = NetworkConfiguration {
+            network: DEAFULT_DATA_NETWORK.to_owned(),
+            ipv4: None,
+            enable: true,
+            default: LinkShape {
+                latency: to_string(Duration::from_millis(50)),
+                jitter: to_string(Duration::from_millis(5)),
+                bandwidth: 2000,
+                filter: FilterAction::Accept,
+                loss: 1.0,
+                corrupt: 1.0,
+                corrupt_corr: 1.0,
+                reorder: 1.0,
+                reorder_corr: 1.0,
+                duplicate: 1.0,
+                duplicate_corr: 1.0,
+            },
+            rules: vec![],
+            callback_state: "trafic".to_owned(),
+            callback_target: 10,
+            routing_policy: RoutingPolicyType::AllowAll,
+        };
+
+        let json = serde_json::to_string_pretty(&network_conf).unwrap();
+
+        println!("{}", json);
+    }
 }
