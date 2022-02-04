@@ -30,7 +30,7 @@ pub enum Command {
         stream: mpsc::Sender<Result<String, Error>>,
     },
 
-    Signal {
+    SignalEntry {
         state: String,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
@@ -188,7 +188,7 @@ impl BackgroundTask {
 
                 self.subscribe(id, topic, stream).await
             }
-            Command::Signal { state, sender } => {
+            Command::SignalEntry { state, sender } => {
                 let state = self.contextualize_state(&state);
 
                 self.signal(id, state, sender).await
@@ -215,9 +215,7 @@ impl BackgroundTask {
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
                 if !self.params.test_sidecar {
-                    sender
-                        .send(Err(Error::SideCar))
-                        .expect("receiver not dropped");
+                    let _ = sender.send(Err(Error::SideCar));
                     return;
                 }
 
@@ -239,9 +237,7 @@ impl BackgroundTask {
             }
             Command::NetworkShaping { config, sender } => {
                 if !self.params.test_sidecar {
-                    sender
-                        .send(Err(Error::SideCar))
-                        .expect("receiver not dropped");
+                    let _ = sender.send(Err(Error::SideCar));
                     return;
                 }
 
@@ -278,7 +274,7 @@ impl BackgroundTask {
             .expect("receiver not dropped");
 
         if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-            sender.send(Err(e)).expect("receiver not dropped");
+            let _ = sender.send(Err(e));
         } else {
             self.pending_cmd
                 .insert(id, PendingRequest::PublishOrSignal { sender });
@@ -307,7 +303,7 @@ impl BackgroundTask {
             .expect("receiver not dropped");
 
         if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-            stream.send(Err(e)).await.expect("receiver not dropped");
+            let _ = stream.send(Err(e)).await;
         } else {
             self.pending_cmd
                 .insert(id, PendingRequest::Subscribe { stream });
@@ -336,7 +332,7 @@ impl BackgroundTask {
             .expect("receiver not dropped");
 
         if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-            sender.send(Err(e)).expect("receiver not dropped");
+            let _ = sender.send(Err(e));
         } else {
             self.pending_cmd
                 .insert(id, PendingRequest::PublishOrSignal { sender });
@@ -366,7 +362,7 @@ impl BackgroundTask {
             .expect("receiver not dropped");
 
         if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-            sender.send(Err(e)).expect("receiver not dropped");
+            let _ = sender.send(Err(e));
         } else {
             self.pending_cmd
                 .insert(id, PendingRequest::Barrier { sender });

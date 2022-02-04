@@ -3,7 +3,10 @@
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use serde::Serialize;
 
-#[derive(Serialize, Debug)]
+use serde_repr::{Deserialize_repr, Serialize_repr};
+
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[repr(u8)]
 pub enum FilterAction {
     Accept = 0,
     Reject = 1,
@@ -89,7 +92,6 @@ pub struct NetworkConfiguration {
     /// and shouldn't be used by the test.
     ///
     /// TODO: IPv6 is currently not supported.
-    #[serde(rename = "IPv4")]
     pub ipv4: Option<Ipv4Network>,
 
     /// Enable enables this network device.

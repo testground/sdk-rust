@@ -92,7 +92,7 @@ impl Client {
 
         let state = state.into().into_owned();
 
-        let cmd = Command::Signal {
+        let cmd = Command::SignalEntry {
             state: state.clone(),
             sender,
         };
@@ -123,7 +123,7 @@ impl Client {
         let (sender, receiver) = oneshot::channel();
 
         let state = state.into().into_owned();
-        let cmd = Command::Signal { state, sender };
+        let cmd = Command::SignalEntry { state, sender };
 
         self.cmd_tx.send(cmd).await.expect("receiver not dropped");
 
