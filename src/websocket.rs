@@ -111,9 +111,9 @@ impl<'a> WebsocketClient<'a> {
                         },
                     };
 
-                    let json = serde_json::to_string(&req).expect("Request Serialization");
+                    let mut json = serde_json::to_vec(&req).expect("Request Serialization");
 
-                    if let Err(e) = tx.send_text_owned(json).await {
+                    if let Err(e) = tx.send_binary_mut(&mut json).await {
                         sender.send(Err(e.into())).expect("receiver not dropped");
                         continue;
                     }

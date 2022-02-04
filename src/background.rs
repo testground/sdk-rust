@@ -13,7 +13,7 @@ use crate::{
     events::Event,
     network_conf::NetworkConfiguration,
     params::RunParameters,
-    requests::{Request, RequestType},
+    requests::{PlayloadType, Request, RequestType},
     responses::{Response, ResponseType},
     websocket::WebsocketClient,
 };
@@ -22,7 +22,7 @@ use crate::{
 pub enum Command {
     Publish {
         topic: String,
-        payload: String,
+        message: String,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
     Subscribe {
@@ -176,12 +176,13 @@ impl BackgroundTask {
         match cmd {
             Command::Publish {
                 topic,
-                payload,
+                message,
                 sender,
             } => {
                 let topic = self.contextualize_topic(&topic);
 
-                self.publish(id, topic, payload, sender).await
+                self.publish(id, topic, PlayloadType::String(message), sender)
+                    .await
             }
             Command::Subscribe { topic, stream } => {
                 let topic = self.contextualize_topic(&topic);
@@ -209,9 +210,9 @@ impl BackgroundTask {
                 };
 
                 let topic = self.contextualize_event();
-                let payload = serde_json::to_string(&event).expect("Event Serialization");
 
-                self.publish(id, topic, payload, sender).await
+                self.publish(id, topic, PlayloadType::Event(event), sender)
+                    .await
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
                 if !self.params.test_sidecar {
@@ -231,9 +232,9 @@ impl BackgroundTask {
                 };
 
                 let topic = self.contextualize_event();
-                let payload = serde_json::to_string(&event).expect("Event Serialization");
 
-                self.publish(id, topic, payload, sender).await
+                self.publish(id, topic, PlayloadType::Event(event), sender)
+                    .await
             }
             Command::NetworkShaping { config, sender } => {
                 if !self.params.test_sidecar {
@@ -244,9 +245,9 @@ impl BackgroundTask {
                 let topic = format!("network:{}", self.params.hostname);
 
                 let topic = self.contextualize_topic(&topic);
-                let payload = serde_json::to_string(&config).expect("Config Serialization");
 
-                self.publish(id, topic, payload, sender).await
+                self.publish(id, topic, PlayloadType::Config(config), sender)
+                    .await
             }
         }
     }
@@ -255,7 +256,7 @@ impl BackgroundTask {
         &mut self,
         id: u64,
         topic: String,
-        payload: String,
+        payload: PlayloadType,
         sender: oneshot::Sender<Result<u64, Error>>,
     ) {
         let request = Request {

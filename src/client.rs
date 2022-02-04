@@ -48,13 +48,13 @@ impl Client {
     pub async fn publish(
         &self,
         topic: impl Into<Cow<'static, str>>,
-        payload: impl Into<Cow<'static, str>>,
+        message: impl Into<Cow<'static, str>>,
     ) -> Result<u64, Error> {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::Publish {
             topic: topic.into().into_owned(),
-            payload: payload.into().into_owned(),
+            message: message.into().into_owned(),
             sender,
         };
 

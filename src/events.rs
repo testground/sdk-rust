@@ -23,3 +23,22 @@ pub enum Event {
     #[serde(rename = "stage_end_event")]
     StageEnd { name: String, group: String },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serde_test() {
+        //let raw_response = r#"{"key": "run:c7uji38e5te2b9t464v0:plan:streaming_test:case:quickstart:run_events", "error": "failed to decode as type *runtime.Event: \"{\\\"stage_end_event\\\":{\\\"name\\\":\\\"network-initialized\\\",\\\"group\\\":\\\"single\\\"}}\"", "id": "0"}"#;
+
+        let event = Event::StageStart {
+            name: "network-initialized".to_owned(),
+            group: "single".to_owned(),
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+
+        println!("{:?}", json);
+    }
+}
