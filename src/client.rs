@@ -189,7 +189,11 @@ impl Client {
         let (sender, receiver) = oneshot::channel();
 
         let state = config.callback_state.clone();
-        let target = config.callback_target;
+        let mut target = 0;
+
+        if let Some(callback_target) = config.callback_target {
+            target = callback_target;
+        }
 
         let cmd = Command::NetworkShaping { sender, config };
 

@@ -17,14 +17,10 @@ pub enum FilterAction {
 /// LinkShape defines how traffic should be shaped.
 pub struct LinkShape {
     /// Latency is the egress latency.
-    ///
-    /// Egg; 10s, 50ms, etc...
-    pub latency: String,
+    pub latency: u64,
 
     /// Jitter is the egress jitter.
-    ///
-    /// Egg; 10s, 50ms, etc...
-    pub jitter: String,
+    pub jitter: u64,
 
     /// Bandwidth is egress bytes per second.
     pub bandwidth: u64,
@@ -92,7 +88,10 @@ pub struct NetworkConfiguration {
     /// and shouldn't be used by the test.
     ///
     /// TODO: IPv6 is currently not supported.
+    #[serde(rename = "IPv4")]
     pub ipv4: Option<Ipv4Network>,
+    #[serde(rename = "IPv6")]
+    pub ipv6: Option<Ipv4Network>,
 
     /// Enable enables this network device.
     pub enable: bool,
@@ -103,7 +102,7 @@ pub struct NetworkConfiguration {
     /// Rules defines how traffic should be shaped to different subnets.
     ///
     /// TODO: This is not implemented.
-    pub rules: Vec<LinkRule>,
+    pub rules: Option<Vec<LinkRule>>,
 
     /// CallbackState will be signalled when the link changes are applied.
     ///
@@ -113,8 +112,8 @@ pub struct NetworkConfiguration {
 
     /// CallbackTarget is the amount of instances that will have needed to signal
     /// on the Callback state to consider the configuration operation a success.
-    #[serde(rename = "-")]
-    pub callback_target: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callback_target: Option<u64>,
 
     /// RoutingPolicy defines the data routing policy of a certain node. This affects
     /// external networks other than the network 'Default', e.g., external Internet
@@ -124,38 +123,42 @@ pub struct NetworkConfiguration {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::net::Ipv4Addr;
 
     use super::*;
-    use durationfmt::to_string;
 
     #[test]
     fn serde_test() {
+        let output = r#"{"network":"default","IPv4":"16.0.1.1/24","IPv6":null,"enable":true,"default":{"latency":10000000,"jitter":0,"bandwidth":1048576,"filter":0,"loss":0.0,"corrupt":0.0,"corrupt_corr":0.0,"reorder":0.0,"reorder_corr":0.0,"duplicate":0.0,"duplicate_corr":0.0},"rules":null,"callback_state":"latency-reduced","routing_policy":"deny_all"}"#;
+
         let network_conf = NetworkConfiguration {
             network: DEAFULT_DATA_NETWORK.to_owned(),
-            ipv4: None,
+            ipv4: Some(Ipv4Network::new(Ipv4Addr::new(16, 0, 1, 1), 24).unwrap()),
+            ipv6: None,
             enable: true,
             default: LinkShape {
-                latency: to_string(Duration::from_millis(50)),
-                jitter: to_string(Duration::from_millis(5)),
-                bandwidth: 2000,
+                latency: 10000000,
+                jitter: 0,
+                bandwidth: 1048576,
                 filter: FilterAction::Accept,
-                loss: 1.0,
-                corrupt: 1.0,
-                corrupt_corr: 1.0,
-                reorder: 1.0,
-                reorder_corr: 1.0,
-                duplicate: 1.0,
-                duplicate_corr: 1.0,
+                loss: 0.0,
+                corrupt: 0.0,
+                corrupt_corr: 0.0,
+                reorder: 0.0,
+                reorder_corr: 0.0,
+                duplicate: 0.0,
+                duplicate_corr: 0.0,
             },
-            rules: vec![],
-            callback_state: "trafic".to_owned(),
-            callback_target: 10,
-            routing_policy: RoutingPolicyType::AllowAll,
+            rules: None,
+            callback_state: "latency-reduced".to_owned(),
+            callback_target: None,
+            routing_policy: RoutingPolicyType::DenyAll,
         };
 
-        let json = serde_json::to_string_pretty(&network_conf).unwrap();
+        let input = serde_json::to_string(&network_conf).unwrap();
 
-        println!("{}", json);
+        println!("{}", input);
+
+        assert_eq!(input, output)
     }
 }

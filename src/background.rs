@@ -10,7 +10,7 @@ use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 
 use crate::{
     errors::Error,
-    events::Event,
+    events::{Event, EventType},
     network_conf::NetworkConfiguration,
     params::RunParameters,
     requests::{PlayloadType, Request, RequestType},
@@ -196,17 +196,23 @@ impl BackgroundTask {
             }
             Command::Barrier {
                 state,
-                target,
+                mut target,
                 sender,
             } => {
                 let state = self.contextualize_state(&state);
 
+                if target == 0 {
+                    target = self.params.test_instance_count;
+                }
+
                 self.barrier(id, state, target, sender).await
             }
             Command::WaitNetworkInitializedStart { sender } => {
-                let event = Event::StageStart {
-                    name: "network-initialized".to_owned(),
-                    group: self.params.test_group_id.clone(),
+                let event = Event {
+                    event: EventType::StageStart {
+                        name: "network-initialized".to_owned(),
+                        group: self.params.test_group_id.clone(),
+                    },
                 };
 
                 let topic = self.contextualize_event();
@@ -226,9 +232,11 @@ impl BackgroundTask {
                 self.barrier(id, state, target, sender).await;
             }
             Command::WaitNetworkInitializedEnd { sender } => {
-                let event = Event::StageEnd {
-                    name: "network-initialized".to_owned(),
-                    group: self.params.test_group_id.clone(),
+                let event = Event {
+                    event: EventType::StageEnd {
+                        name: "network-initialized".to_owned(),
+                        group: self.params.test_group_id.clone(),
+                    },
                 };
 
                 let topic = self.contextualize_event();
