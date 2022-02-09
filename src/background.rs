@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use influxdb::{Client, WriteQuery};
-use structopt::StructOpt;
 use tokio::{
     sync::{mpsc, oneshot},
     task::JoinHandle,
@@ -121,20 +120,16 @@ impl Drop for BackgroundTask {
 impl BackgroundTask {
     pub async fn new(
         client_rx: mpsc::UnboundedReceiver<Command>,
+        params: RunParameters,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let client_rx = UnboundedReceiverStream::new(client_rx);
-
-        let params = RunParameters::from_args();
-
         let (websocket_tx, req_rx) = mpsc::unbounded_channel();
         let (res_tx, websocket_rx) = mpsc::unbounded_channel();
 
         let web = WebsocketClient::new(res_tx, req_rx).await?;
 
-        let handle = tokio::spawn(async move {
-            web.run().await;
-        });
+        let handle = tokio::spawn(web.run());
 
+        let client_rx = UnboundedReceiverStream::new(client_rx);
         let websocket_rx = UnboundedReceiverStream::new(websocket_rx);
 
         let influxdb = Client::new(params.influxdb_url.clone(), "testground");
@@ -178,7 +173,7 @@ impl BackgroundTask {
         next_id
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(mut self) {
         loop {
             tokio::select! {
                 res = self.websocket_rx.next() => match res {

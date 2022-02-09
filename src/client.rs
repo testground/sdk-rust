@@ -1,6 +1,17 @@
 use std::borrow::Cow;
 
+use crate::{
+    background::{BackgroundTask, Command},
+    errors::Error,
+    events::{Event, EventType},
+    network_conf::NetworkConfiguration,
+    RunParameters,
+};
+
+use clap::Parser;
+
 use influxdb::WriteQuery;
+
 use tokio::{
     sync::{
         mpsc::{self, unbounded_channel, UnboundedSender},
@@ -9,13 +20,6 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_stream::{wrappers::UnboundedReceiverStream, Stream};
-
-use crate::{
-    background::{BackgroundTask, Command},
-    errors::Error,
-    events::{Event, EventType},
-    network_conf::NetworkConfiguration,
-};
 
 const BACKGROUND_RECEIVER: &str = "Background Receiver";
 const BACKGROUND_SENDER: &str = "Background Sender";
@@ -33,16 +37,16 @@ impl Drop for Client {
 }
 
 impl Client {
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new() -> Result<(Self, RunParameters), Box<dyn std::error::Error>> {
+        let params = RunParameters::try_parse()?;
+
         let (cmd_tx, cmd_rx) = unbounded_channel();
 
-        let mut background = BackgroundTask::new(cmd_rx).await?;
+        let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
 
-        let handle = tokio::spawn(async move {
-            background.run().await;
-        });
+        let handle = tokio::spawn(background.run());
 
-        Ok(Self { cmd_tx, handle })
+        Ok((Self { cmd_tx, handle }, params))
     }
 
     /// ```publish``` publishes an item on the supplied topic.

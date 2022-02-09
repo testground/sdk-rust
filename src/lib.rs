@@ -7,3 +7,5 @@ mod params;
 mod requests;
 mod responses;
 mod websocket;
+
+pub use params::RunParameters;
