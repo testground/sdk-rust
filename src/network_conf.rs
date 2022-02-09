@@ -86,10 +86,10 @@ pub struct NetworkConfiguration {
     /// Your test-case will be assigned a B block in the range
     /// 16.0.0.1-32.0.0.0. X.Y.0.1 will always be reserved for the gateway
     /// and shouldn't be used by the test.
-    ///
-    /// TODO: IPv6 is currently not supported.
     #[serde(rename = "IPv4")]
     pub ipv4: Option<Ipv4Network>,
+
+    /// TODO: IPv6 is currently not supported.
     #[serde(rename = "IPv6")]
     pub ipv6: Option<Ipv4Network>,
 

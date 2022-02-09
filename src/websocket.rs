@@ -17,14 +17,14 @@ use crate::{
 pub struct WebsocketClient<'a> {
     client: Client<'a, Compat<TcpStream>>,
 
-    sender: mpsc::Sender<Result<Response, Error>>,
-    receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), Error>>)>,
+    sender: mpsc::UnboundedSender<Result<Response, Error>>,
+    receiver: mpsc::UnboundedReceiver<(Request, oneshot::Sender<Result<(), Error>>)>,
 }
 
 impl<'a> WebsocketClient<'a> {
     pub async fn new(
-        sender: mpsc::Sender<Result<Response, Error>>,
-        receiver: mpsc::Receiver<(Request, oneshot::Sender<Result<(), Error>>)>,
+        sender: mpsc::UnboundedSender<Result<Response, Error>>,
+        receiver: mpsc::UnboundedReceiver<(Request, oneshot::Sender<Result<(), Error>>)>,
     ) -> Result<WebsocketClient<'a>, Box<dyn std::error::Error>> {
         let socket = tokio::net::TcpStream::connect(("testground-sync-service", 5050)).await?;
 
@@ -86,10 +86,7 @@ impl<'a> WebsocketClient<'a> {
                     };
 
                     if let Err(e) = res {
-                        self.sender
-                            .send(Err(e.into()))
-                            .await
-                            .expect("receiver not dropped");
+                        self.sender.send(Err(e.into())).expect("receiver not dropped");
                         continue;
                     }
 
@@ -97,10 +94,7 @@ impl<'a> WebsocketClient<'a> {
 
                     let msg = serde_json::from_slice::<RawResponse>(&buf).expect("Response Deserialization");
 
-                    self.sender
-                        .send(Ok(msg.into()))
-                        .await
-                        .expect("receiver not dropped");
+                    self.sender.send(Ok(msg.into())).expect("receiver not dropped");
                 },
                 req = self.receiver.recv() => {
                     let (req, sender) = match req {

@@ -2,22 +2,26 @@ use std::borrow::Cow;
 
 use tokio::{
     sync::{
-        mpsc::{self, channel, Sender},
+        mpsc::{self, unbounded_channel, UnboundedSender},
         oneshot,
     },
     task::JoinHandle,
 };
-use tokio_stream::{wrappers::ReceiverStream, Stream};
+use tokio_stream::{wrappers::UnboundedReceiverStream, Stream};
 
 use crate::{
     background::{BackgroundTask, Command},
     errors::Error,
+    events::{Event, EventType},
     network_conf::NetworkConfiguration,
 };
 
+const BACKGROUND_RECEIVER: &str = "Background Receiver";
+const BACKGROUND_SENDER: &str = "Background Sender";
+
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
 pub struct Client {
-    cmd_tx: Sender<Command>,
+    cmd_tx: UnboundedSender<Command>,
     handle: JoinHandle<()>,
 }
 
@@ -29,7 +33,7 @@ impl Drop for Client {
 
 impl Client {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let (cmd_tx, cmd_rx) = channel(10);
+        let (cmd_tx, cmd_rx) = unbounded_channel();
 
         let mut background = BackgroundTask::new(cmd_rx).await?;
 
@@ -58,9 +62,9 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")
+        receiver.await.expect(BACKGROUND_SENDER)
     }
 
     /// ```subscribe``` subscribes to a topic, consuming ordered, elements from index 0.
@@ -68,16 +72,16 @@ impl Client {
         &self,
         topic: impl Into<Cow<'static, str>>,
     ) -> impl Stream<Item = Result<String, Error>> {
-        let (stream, out) = mpsc::channel(10);
+        let (stream, out) = mpsc::unbounded_channel();
 
         let cmd = Command::Subscribe {
             topic: topic.into().into_owned(),
             stream,
         };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        ReceiverStream::new(out)
+        UnboundedReceiverStream::new(out)
     }
 
     /// ```signal_and_wait``` composes SignalEntry and Barrier,
@@ -97,9 +101,9 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        let res = receiver.await.expect("sender not dropped")?;
+        let res = receiver.await.expect(BACKGROUND_SENDER)?;
 
         let (sender, receiver) = oneshot::channel();
 
@@ -109,9 +113,9 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")?;
+        receiver.await.expect(BACKGROUND_SENDER)?;
 
         Ok(res)
     }
@@ -125,9 +129,9 @@ impl Client {
         let state = state.into().into_owned();
         let cmd = Command::SignalEntry { state, sender };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")
+        receiver.await.expect(BACKGROUND_SENDER)
     }
 
     /// ```barrier``` sets a barrier on the supplied ```state``` that fires when it reaches its target value (or higher).
@@ -145,9 +149,9 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")
+        receiver.await.expect(BACKGROUND_SENDER)
     }
 
     /// ```wait_network_initialized``` waits for the sidecar to initialize the network,
@@ -158,27 +162,27 @@ impl Client {
 
         let cmd = Command::WaitNetworkInitializedStart { sender };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")?;
+        receiver.await.expect(BACKGROUND_SENDER)?;
 
         // Barrier
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::WaitNetworkInitializedBarrier { sender };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")?;
+        receiver.await.expect(BACKGROUND_SENDER)?;
 
         // Event
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::WaitNetworkInitializedEnd { sender };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")?;
+        receiver.await.expect(BACKGROUND_SENDER)?;
 
         Ok(())
     }
@@ -189,17 +193,17 @@ impl Client {
         let (sender, receiver) = oneshot::channel();
 
         let state = config.callback_state.clone();
-        let mut target = 0;
-
-        if let Some(callback_target) = config.callback_target {
-            target = callback_target;
-        }
+        let target = if let Some(callback_target) = config.callback_target {
+            callback_target
+        } else {
+            0
+        };
 
         let cmd = Command::NetworkShaping { sender, config };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")?;
+        receiver.await.expect(BACKGROUND_SENDER)?;
 
         // Barrier
         let (sender, receiver) = oneshot::channel();
@@ -210,9 +214,72 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).await.expect("receiver not dropped");
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
 
-        receiver.await.expect("sender not dropped")?;
+        receiver.await.expect(BACKGROUND_SENDER)?;
+
+        Ok(())
+    }
+
+    pub fn record_message(&self, message: impl Into<Cow<'static, str>>) {
+        let message = message.into().into_owned();
+
+        let event = Event {
+            event: EventType::Message { message },
+        };
+
+        //TODO implment logger similar to go-sdk
+
+        let json_event = serde_json::to_string(&event).expect("Event Serialization");
+
+        println!("{}", json_event);
+    }
+
+    pub async fn record_success(&self) -> Result<(), Error> {
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::SignalSuccess { sender };
+
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+
+        receiver.await.expect(BACKGROUND_SENDER)?;
+
+        Ok(())
+    }
+
+    pub async fn record_failure(&self, error: impl Into<Cow<'static, str>>) -> Result<(), Error> {
+        let error = error.into().into_owned();
+
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::SignalFailure { error, sender };
+
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+
+        receiver.await.expect(BACKGROUND_SENDER)?;
+
+        Ok(())
+    }
+
+    pub async fn record_crash(
+        &self,
+        error: impl Into<Cow<'static, str>>,
+        stacktrace: impl Into<Cow<'static, str>>,
+    ) -> Result<(), Error> {
+        let error = error.into().into_owned();
+        let stacktrace = stacktrace.into().into_owned();
+
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::SignalCrash {
+            error,
+            stacktrace,
+            sender,
+        };
+
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+
+        receiver.await.expect(BACKGROUND_SENDER)?;
 
         Ok(())
     }

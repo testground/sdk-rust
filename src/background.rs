@@ -6,7 +6,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 
 use crate::{
     errors::Error,
@@ -18,6 +18,9 @@ use crate::{
     websocket::WebsocketClient,
 };
 
+const WEBSOCKET_RECEIVER: &str = "Websocket Receiver";
+const WEBSOCKET_SENDER: &str = "Websocket Sender";
+
 #[derive(Debug)]
 pub enum Command {
     Publish {
@@ -27,7 +30,7 @@ pub enum Command {
     },
     Subscribe {
         topic: String,
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::UnboundedSender<Result<String, Error>>,
     },
 
     SignalEntry {
@@ -57,6 +60,21 @@ pub enum Command {
         config: NetworkConfiguration,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
+
+    SignalSuccess {
+        sender: oneshot::Sender<Result<u64, Error>>,
+    },
+
+    SignalFailure {
+        error: String,
+        sender: oneshot::Sender<Result<u64, Error>>,
+    },
+
+    SignalCrash {
+        error: String,
+        stacktrace: String,
+        sender: oneshot::Sender<Result<u64, Error>>,
+    },
 }
 
 #[derive(Debug)]
@@ -68,20 +86,20 @@ enum PendingRequest {
         sender: oneshot::Sender<Result<(), Error>>,
     },
     Subscribe {
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::UnboundedSender<Result<String, Error>>,
     },
 }
 
 pub struct BackgroundTask {
-    websocket_tx: mpsc::Sender<(Request, oneshot::Sender<Result<(), Error>>)>,
+    websocket_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Result<(), Error>>)>,
     handle: JoinHandle<()>,
-    websocket_rx: ReceiverStream<Result<Response, Error>>,
+    websocket_rx: UnboundedReceiverStream<Result<Response, Error>>,
 
     next_id: u64,
 
     params: RunParameters,
 
-    client_rx: ReceiverStream<Command>,
+    client_rx: UnboundedReceiverStream<Command>,
 
     pending_cmd: HashMap<u64, PendingRequest>,
 }
@@ -94,14 +112,14 @@ impl Drop for BackgroundTask {
 
 impl BackgroundTask {
     pub async fn new(
-        client_rx: mpsc::Receiver<Command>,
+        client_rx: mpsc::UnboundedReceiver<Command>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let client_rx = ReceiverStream::new(client_rx);
+        let client_rx = UnboundedReceiverStream::new(client_rx);
 
         let params = RunParameters::from_args();
 
-        let (websocket_tx, req_rx) = mpsc::channel(10);
-        let (res_tx, websocket_rx) = mpsc::channel(10);
+        let (websocket_tx, req_rx) = mpsc::unbounded_channel();
+        let (res_tx, websocket_rx) = mpsc::unbounded_channel();
 
         let web = WebsocketClient::new(res_tx, req_rx).await?;
 
@@ -109,7 +127,7 @@ impl BackgroundTask {
             web.run().await;
         });
 
-        let websocket_rx = ReceiverStream::new(websocket_rx);
+        let websocket_rx = UnboundedReceiverStream::new(websocket_rx);
 
         Ok(Self {
             websocket_rx,
@@ -257,6 +275,49 @@ impl BackgroundTask {
                 self.publish(id, topic, PlayloadType::Config(config), sender)
                     .await
             }
+            Command::SignalSuccess { sender } => {
+                let event = Event {
+                    event: EventType::Success {
+                        groups: self.params.test_group_id.clone(),
+                    },
+                };
+
+                let topic = self.contextualize_event();
+
+                self.publish(id, topic, PlayloadType::Event(event), sender)
+                    .await
+            }
+            Command::SignalFailure { error, sender } => {
+                let event = Event {
+                    event: EventType::Failure {
+                        groups: self.params.test_group_id.clone(),
+                        error,
+                    },
+                };
+
+                let topic = self.contextualize_event();
+
+                self.publish(id, topic, PlayloadType::Event(event), sender)
+                    .await
+            }
+            Command::SignalCrash {
+                error,
+                stacktrace,
+                sender,
+            } => {
+                let event = Event {
+                    event: EventType::Crash {
+                        groups: self.params.test_group_id.clone(),
+                        error,
+                        stacktrace,
+                    },
+                };
+
+                let topic = self.contextualize_event();
+
+                self.publish(id, topic, PlayloadType::Event(event), sender)
+                    .await
+            }
         }
     }
 
@@ -277,12 +338,9 @@ impl BackgroundTask {
 
         let msg = (request, tx);
 
-        self.websocket_tx
-            .send(msg)
-            .await
-            .expect("receiver not dropped");
+        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
 
-        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = sender.send(Err(e));
         } else {
             self.pending_cmd
@@ -294,7 +352,7 @@ impl BackgroundTask {
         &mut self,
         id: u64,
         topic: String,
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::UnboundedSender<Result<String, Error>>,
     ) {
         let request = Request {
             id: id.to_string(),
@@ -306,13 +364,10 @@ impl BackgroundTask {
 
         let msg = (request, tx);
 
-        self.websocket_tx
-            .send(msg)
-            .await
-            .expect("receiver not dropped");
+        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
 
-        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
-            let _ = stream.send(Err(e)).await;
+        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
+            let _ = stream.send(Err(e));
         } else {
             self.pending_cmd
                 .insert(id, PendingRequest::Subscribe { stream });
@@ -335,12 +390,9 @@ impl BackgroundTask {
 
         let msg = (request, tx);
 
-        self.websocket_tx
-            .send(msg)
-            .await
-            .expect("receiver not dropped");
+        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
 
-        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = sender.send(Err(e));
         } else {
             self.pending_cmd
@@ -365,12 +417,9 @@ impl BackgroundTask {
 
         let msg = (request, tx);
 
-        self.websocket_tx
-            .send(msg)
-            .await
-            .expect("receiver not dropped");
+        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
 
-        if let Err(e) = websocket_rx.await.expect("sender not dropped") {
+        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = sender.send(Err(e));
         } else {
             self.pending_cmd
@@ -404,10 +453,10 @@ impl BackgroundTask {
                 let _ = sender.send(Err(Error::SyncService(error)));
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Error(error)) => {
-                let _ = stream.send(Err(Error::SyncService(error))).await;
+                let _ = stream.send(Err(Error::SyncService(error)));
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Subscribe(msg)) => {
-                if let Err(_) = stream.send(Ok(msg)).await {
+                if let Err(_) = stream.send(Ok(msg)) {
                     return;
                 }
 
