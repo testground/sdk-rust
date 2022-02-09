@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use influxdb::WriteQuery;
 use tokio::{
     sync::{
         mpsc::{self, unbounded_channel, UnboundedSender},
@@ -274,6 +275,21 @@ impl Client {
         let cmd = Command::SignalCrash {
             error,
             stacktrace,
+            sender,
+        };
+
+        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+
+        receiver.await.expect(BACKGROUND_SENDER)?;
+
+        Ok(())
+    }
+
+    pub async fn record_metric(&self, write_query: WriteQuery) -> Result<(), Error> {
+        let (sender, receiver) = oneshot::channel();
+
+        let cmd = Command::Metric {
+            write_query,
             sender,
         };
 

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use influxdb::{Client, WriteQuery};
 use structopt::StructOpt;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -75,6 +76,11 @@ pub enum Command {
         stacktrace: String,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
+
+    Metric {
+        write_query: WriteQuery,
+        sender: oneshot::Sender<Result<(), Error>>,
+    },
 }
 
 #[derive(Debug)]
@@ -94,6 +100,8 @@ pub struct BackgroundTask {
     websocket_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Result<(), Error>>)>,
     handle: JoinHandle<()>,
     websocket_rx: UnboundedReceiverStream<Result<Response, Error>>,
+
+    influxdb: influxdb::Client,
 
     next_id: u64,
 
@@ -129,14 +137,17 @@ impl BackgroundTask {
 
         let websocket_rx = UnboundedReceiverStream::new(websocket_rx);
 
+        let influxdb = Client::new(params.influxdb_url.clone(), "testground");
+
         Ok(Self {
+            websocket_tx,
             websocket_rx,
+            handle,
+            influxdb,
             next_id: 0,
             params,
             client_rx,
-            websocket_tx,
             pending_cmd: Default::default(),
-            handle,
         })
     }
 
@@ -317,6 +328,21 @@ impl BackgroundTask {
 
                 self.publish(id, topic, PlayloadType::Event(event), sender)
                     .await
+            }
+            Command::Metric {
+                write_query,
+                sender,
+            } => {
+                //TODO add global tag to the query before processing
+
+                match self.influxdb.query(write_query).await {
+                    Ok(_) => {
+                        let _ = sender.send(Ok(()));
+                    }
+                    Err(e) => {
+                        let _ = sender.send(Err(e.into()));
+                    }
+                }
             }
         }
     }

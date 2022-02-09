@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use pnet::ipnetwork::{IpNetwork, Ipv4Network};
+use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use serde::Serialize;
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -91,7 +91,7 @@ pub struct NetworkConfiguration {
 
     /// TODO: IPv6 is currently not supported.
     #[serde(rename = "IPv6")]
-    pub ipv6: Option<Ipv4Network>,
+    pub ipv6: Option<Ipv6Network>,
 
     /// Enable enables this network device.
     pub enable: bool,

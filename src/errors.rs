@@ -12,4 +12,6 @@ pub enum Error {
     SyncService(String),
     #[error("The SideCar is not running")]
     SideCar,
+    #[error("InfluxDB: {0}")]
+    InfluxDB(#[from] influxdb::Error),
 }

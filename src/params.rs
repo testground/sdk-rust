@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use pnet::ipnetwork::IpNetwork;
+use ipnetwork::IpNetwork;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -53,7 +53,7 @@ pub struct RunParameters {
     #[structopt(env)]
     pub hostname: String, // HOSTNAME: e6f4cc8fc147
     #[structopt(env)]
-    pub influxdb_url: Option<String>, // INFLUXDB_URL: http://testground-influxdb:8086
+    pub influxdb_url: String, // INFLUXDB_URL: http://testground-influxdb:8086
     #[structopt(env)]
     pub redis_host: Option<String>, // REDIS_HOST: testground-redis
                                     // HOME: /
