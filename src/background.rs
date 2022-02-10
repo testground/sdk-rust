@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use influxdb::{Client, WriteQuery};
-use tokio::{
-    sync::{mpsc, oneshot},
-    task::JoinHandle,
-};
+use tokio::sync::{mpsc, oneshot};
 
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 
@@ -97,7 +94,6 @@ enum PendingRequest {
 
 pub struct BackgroundTask {
     websocket_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Result<(), Error>>)>,
-    handle: JoinHandle<()>,
     websocket_rx: UnboundedReceiverStream<Result<Response, Error>>,
 
     influxdb: influxdb::Client,
@@ -111,12 +107,6 @@ pub struct BackgroundTask {
     pending_cmd: HashMap<u64, PendingRequest>,
 }
 
-impl Drop for BackgroundTask {
-    fn drop(&mut self) {
-        self.handle.abort();
-    }
-}
-
 impl BackgroundTask {
     pub async fn new(
         client_rx: mpsc::UnboundedReceiver<Command>,
@@ -127,7 +117,7 @@ impl BackgroundTask {
 
         let web = WebsocketClient::new(res_tx, req_rx).await?;
 
-        let handle = tokio::spawn(web.run());
+        tokio::spawn(web.run());
 
         let client_rx = UnboundedReceiverStream::new(client_rx);
         let websocket_rx = UnboundedReceiverStream::new(websocket_rx);
@@ -137,7 +127,7 @@ impl BackgroundTask {
         Ok(Self {
             websocket_tx,
             websocket_rx,
-            handle,
+
             influxdb,
             next_id: 0,
             params,

@@ -12,12 +12,9 @@ use clap::Parser;
 
 use influxdb::WriteQuery;
 
-use tokio::{
-    sync::{
-        mpsc::{self, unbounded_channel, UnboundedSender},
-        oneshot,
-    },
-    task::JoinHandle,
+use tokio::sync::{
+    mpsc::{self, unbounded_channel, UnboundedSender},
+    oneshot,
 };
 use tokio_stream::{wrappers::UnboundedReceiverStream, Stream};
 
@@ -25,15 +22,9 @@ const BACKGROUND_RECEIVER: &str = "Background Receiver";
 const BACKGROUND_SENDER: &str = "Background Sender";
 
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
+#[derive(Clone)]
 pub struct Client {
     cmd_tx: UnboundedSender<Command>,
-    handle: JoinHandle<()>,
-}
-
-impl Drop for Client {
-    fn drop(&mut self) {
-        self.handle.abort();
-    }
 }
 
 impl Client {
@@ -44,9 +35,9 @@ impl Client {
 
         let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
 
-        let handle = tokio::spawn(background.run());
+        tokio::spawn(background.run());
 
-        Ok((Self { cmd_tx, handle }, params))
+        Ok((Self { cmd_tx }, params))
     }
 
     /// ```publish``` publishes an item on the supplied topic.
