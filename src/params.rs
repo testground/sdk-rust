@@ -30,7 +30,7 @@ pub struct RunParameters {
     #[clap(env)]
     pub test_instance_role: String, // TEST_INSTANCE_ROLE:
     #[clap(env)]
-    pub test_instance_params: String, // TEST_INSTANCE_PARAMS:
+    pub test_instance_params: String, // TEST_INSTANCE_PARAMS: feature=false|neutral_nodes=10|num=2|word=never
 
     #[clap(long, env)]
     pub test_sidecar: bool, // TEST_SIDECAR: true

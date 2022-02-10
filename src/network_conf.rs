@@ -22,7 +22,7 @@ pub struct LinkShape {
     /// Jitter is the egress jitter.
     pub jitter: u64,
 
-    /// Bandwidth is egress bytes per second.
+    /// Bandwidth is egress bits per second.
     pub bandwidth: u64,
 
     /// Drop all inbound traffic.
