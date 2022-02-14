@@ -77,47 +77,37 @@ impl<'a> WebsocketClient<'a> {
         loop {
             tokio::select! {
                 res = socket_packets.next() => {
-                    let res = match res {
-                        Some(res) => res,
-                        None => {
-                            eprintln!("Web socket response receiver dropped");
-                            return;
-                        },
+                    let res = res.expect("Websocket Receiver");
+
+                    let (_, buf) =  match res {
+                        Ok(res) => res,
+                        Err(e) => {
+                            self.sender.send(Err(e.into())).expect("Receiver");
+                            continue;
+                        }
                     };
-
-                    if let Err(e) = res {
-                        self.sender.send(Err(e.into())).expect("receiver not dropped");
-                        continue;
-                    }
-
-                    let (_, buf) = res.unwrap();
 
                     let msg = serde_json::from_slice::<RawResponse>(&buf).expect("Response Deserialization");
 
-                    self.sender.send(Ok(msg.into())).expect("receiver not dropped");
+                    self.sender.send(Ok(msg.into())).expect("Receiver");
+
                 },
                 req = self.receiver.recv() => {
-                    let (req, sender) = match req {
-                        Some(req) => req,
-                        None => {
-                            eprintln!("Web socket request sender dropped");
-                            return;
-                        },
-                    };
+                    let (req, sender) = req.expect("Websocket Request Sender");
 
                     let mut json = serde_json::to_vec(&req).expect("Request Serialization");
 
                     if let Err(e) = tx.send_binary_mut(&mut json).await {
-                        sender.send(Err(e.into())).expect("receiver not dropped");
+                        let _ = sender.send(Err(e.into()));
                         continue;
                     }
 
                     if let Err(e) = tx.flush().await {
-                        sender.send(Err(e.into())).expect("receiver not dropped");
+                        let _ = sender.send(Err(e.into()));
                         continue;
                     }
 
-                    sender.send(Ok(())).expect("receiver not dropped");
+                    let _ = sender.send(Ok(()));
                 },
             }
         }

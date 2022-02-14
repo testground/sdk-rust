@@ -167,7 +167,13 @@ impl BackgroundTask {
         loop {
             tokio::select! {
                 res = self.websocket_rx.next() => match res {
-                    Some(res) => self.response(res).await,
+                    Some(res) => match res {
+                        Ok(res) => self.response(res).await,
+                        Err(e) => {
+                            eprintln!("Web socket Error: {}", e);
+                            return;
+                        }
+                    },
                     None => {
                         eprintln!("Web socket receiver dropped");
                         return;
@@ -438,15 +444,7 @@ impl BackgroundTask {
         }
     }
 
-    async fn response(&mut self, res: Result<Response, Error>) {
-        let res = match res {
-            Ok(res) => res,
-            Err(e) => {
-                eprintln!("{:?}", e);
-                return;
-            }
-        };
-
+    async fn response(&mut self, res: Response) {
         let Response { id, response } = res;
 
         let idx = id.parse().unwrap();
