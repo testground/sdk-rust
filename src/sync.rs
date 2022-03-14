@@ -139,6 +139,7 @@ impl Client {
     }
 
     async fn send(&mut self, req: Request) -> Result<(), SendError> {
+        log::debug!("Sending request: {:?}", req);
         self.sender.send_text(serde_json::to_string(&req)?).await?;
         self.sender.flush().await?;
         Ok(())
@@ -148,6 +149,7 @@ impl Client {
         let mut data = Vec::new();
         self.receiver.receive_data(&mut data).await?;
         let resp = serde_json::from_str(&String::from_utf8(data)?)?;
+        log::debug!("Received response: {:?}", resp);
         Ok(resp)
     }
 }
@@ -201,7 +203,7 @@ pub enum PublishSuccessError {
     Remote(String),
     #[error("Remote returned response with unexpected ID {0}.")]
     UnexpectedId(String),
-    #[error("Expected remote to return signal entry in response.")]
+    #[error("Expected remote to return publish entry in response.")]
     ExpectedPublishInResponse,
     #[error("Error sending request {0}")]
     Send(#[from] SendError),
@@ -227,7 +229,7 @@ pub enum ReceiveError {
     FromUtf8(#[from] std::string::FromUtf8Error),
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct Request {
     id: String,
     signal_entry: Option<SignalEntryRequest>,
@@ -235,29 +237,29 @@ struct Request {
     publish: Option<PublishRequest>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct SignalEntryRequest {
     state: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct BarrierRequest {
     state: String,
     target: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct PublishRequest {
     topic: String,
     payload: Event,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct Event {
     success_event: SuccessEvent,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct SuccessEvent {
     group: String,
 }
