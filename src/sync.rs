@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use soketto::connection::{Receiver, Sender};
 use soketto::handshake::{self, ServerResponse};
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 /// Basic synchronization client enabling one to send signals and await barriers.
@@ -105,17 +106,19 @@ impl Client {
     pub async fn publish_success(&mut self) -> Result<u64, PublishSuccessError> {
         let id = self.next_id().to_string();
 
+        let event = Event {
+            success_event: SuccessEvent {
+                group: std::env::var("TEST_GROUP_ID").unwrap(),
+            },
+        };
+
         let request = Request {
             id: id.clone(),
             signal_entry: None,
             barrier: None,
             publish: Some(PublishRequest {
                 topic: topic(),
-                payload: Event {
-                    success_event: SuccessEvent {
-                        group: std::env::var("TEST_GROUP_ID").unwrap(),
-                    },
-                },
+                payload: event.clone(),
             }),
         };
 
@@ -127,9 +130,25 @@ impl Client {
         if !resp.error.is_empty() {
             return Err(PublishSuccessError::Remote(resp.error));
         }
-        resp.publish
+        let seq = resp
+            .publish
             .ok_or(PublishSuccessError::ExpectedPublishInResponse)
-            .map(|resp| resp.seq)
+            .map(|resp| resp.seq)?;
+
+        // The Testground daemon determines the success or failure of a test
+        // instance by parsing stdout for runtime events.
+        println!(
+            "{}",
+            serde_json::to_string(&LogLine {
+                ts: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
+                event,
+            })?
+        );
+
+        Ok(seq)
     }
 
     fn next_id(&mut self) -> u64 {
@@ -199,6 +218,8 @@ pub enum BarrierError {
 
 #[derive(Error, Debug)]
 pub enum PublishSuccessError {
+    #[error("Serde: {0}")]
+    Serde(#[from] serde_json::error::Error),
     #[error("Remote returned error {0}.")]
     Remote(String),
     #[error("Remote returned response with unexpected ID {0}.")]
@@ -255,11 +276,17 @@ struct PublishRequest {
 }
 
 #[derive(Debug, Serialize)]
+struct LogLine {
+    ts: u128,
+    event: Event,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct Event {
     success_event: SuccessEvent,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 struct SuccessEvent {
     group: String,
 }
