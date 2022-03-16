@@ -104,7 +104,7 @@ pub struct BackgroundTask {
 
     client_rx: UnboundedReceiverStream<Command>,
 
-    pending_cmd: HashMap<u64, PendingRequest>,
+    pending_req: HashMap<u64, PendingRequest>,
 }
 
 impl BackgroundTask {
@@ -132,7 +132,7 @@ impl BackgroundTask {
             next_id: 0,
             params,
             client_rx,
-            pending_cmd: Default::default(),
+            pending_req: Default::default(),
         })
     }
 
@@ -360,7 +360,7 @@ impl BackgroundTask {
         if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = sender.send(Err(e));
         } else {
-            self.pending_cmd
+            self.pending_req
                 .insert(id, PendingRequest::PublishOrSignal { sender });
         }
     }
@@ -386,7 +386,7 @@ impl BackgroundTask {
         if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = stream.send(Err(e));
         } else {
-            self.pending_cmd
+            self.pending_req
                 .insert(id, PendingRequest::Subscribe { stream });
         }
     }
@@ -412,7 +412,7 @@ impl BackgroundTask {
         if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = sender.send(Err(e));
         } else {
-            self.pending_cmd
+            self.pending_req
                 .insert(id, PendingRequest::PublishOrSignal { sender });
         }
     }
@@ -439,7 +439,7 @@ impl BackgroundTask {
         if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
             let _ = sender.send(Err(e));
         } else {
-            self.pending_cmd
+            self.pending_req
                 .insert(id, PendingRequest::Barrier { sender });
         }
     }
@@ -449,7 +449,7 @@ impl BackgroundTask {
 
         let idx = id.parse().unwrap();
 
-        let pending_req = match self.pending_cmd.remove(&idx) {
+        let pending_req = match self.pending_req.remove(&idx) {
             Some(req) => req,
             None => return,
         };
@@ -469,7 +469,7 @@ impl BackgroundTask {
                     return;
                 }
 
-                self.pending_cmd
+                self.pending_req
                     .insert(idx, PendingRequest::Subscribe { stream });
             }
             (PendingRequest::PublishOrSignal { sender }, ResponseType::SignalEntry { seq }) => {

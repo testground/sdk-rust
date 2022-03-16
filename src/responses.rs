@@ -26,7 +26,7 @@ pub struct RawResponse {
     pub publish: Option<Publish>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ResponseType {
     SignalEntry { seq: u64 },
     Publish { seq: u64 },
@@ -35,7 +35,7 @@ pub enum ResponseType {
     Barrier,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Response {
     pub id: String,
     pub response: ResponseType,
@@ -95,19 +95,12 @@ mod tests {
 
         let response: Response = response.into();
 
-        println!("{:?}", response);
-    }
-
-    #[test]
-    fn pubsub_desrialization() {
-        let msg = String::from(
-            r#""12D3KooWBs3iMJr7QCXFDiXeSQv8WxZdHZ4FABjw6gqHN7JbsC1W\n/ip4/16.0.0.4/tcp/4001""#,
+        assert_eq!(
+            Response {
+                id: "0".to_owned(),
+                response: ResponseType::Publish { seq: 1 }
+            },
+            response
         );
-
-        println!("Before {}", msg);
-
-        let string: String = serde_json::from_str(&msg).unwrap();
-
-        println!("After {}", string);
     }
 }

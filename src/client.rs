@@ -88,30 +88,11 @@ impl Client {
         state: impl Into<Cow<'static, str>>,
         target: u64,
     ) -> Result<u64, Error> {
-        let (sender, receiver) = oneshot::channel();
-
         let state = state.into().into_owned();
 
-        let cmd = Command::SignalEntry {
-            state: state.clone(),
-            sender,
-        };
+        let res = self.signal(state.clone()).await?;
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
-
-        let res = receiver.await.expect(BACKGROUND_SENDER)?;
-
-        let (sender, receiver) = oneshot::channel();
-
-        let cmd = Command::Barrier {
-            state,
-            target,
-            sender,
-        };
-
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
-
-        receiver.await.expect(BACKGROUND_SENDER)?;
+        self.barrier(state, target).await?;
 
         Ok(res)
     }
@@ -201,18 +182,7 @@ impl Client {
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
-        // Barrier
-        let (sender, receiver) = oneshot::channel();
-
-        let cmd = Command::Barrier {
-            state,
-            target,
-            sender,
-        };
-
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
-
-        receiver.await.expect(BACKGROUND_SENDER)?;
+        self.barrier(state, target).await?;
 
         Ok(())
     }
