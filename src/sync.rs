@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use soketto::connection::{Receiver, Sender};
 use soketto::handshake::{self, ServerResponse};
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 /// Basic synchronization client enabling one to send signals and await barriers.
@@ -57,6 +58,7 @@ impl Client {
                 state: contextualized_state,
             }),
             barrier: None,
+            publish: None,
         };
 
         self.send(request).await?;
@@ -83,6 +85,7 @@ impl Client {
         let request = Request {
             id: id.clone(),
             signal_entry: None,
+            publish: None,
             barrier: Some(BarrierRequest {
                 state: contextualized_state,
                 target,
@@ -100,6 +103,54 @@ impl Client {
         Ok(())
     }
 
+    pub async fn publish_success(&mut self) -> Result<u64, PublishSuccessError> {
+        let id = self.next_id().to_string();
+
+        let event = Event {
+            success_event: SuccessEvent {
+                group: std::env::var("TEST_GROUP_ID").unwrap(),
+            },
+        };
+
+        let request = Request {
+            id: id.clone(),
+            signal_entry: None,
+            barrier: None,
+            publish: Some(PublishRequest {
+                topic: topic(),
+                payload: event.clone(),
+            }),
+        };
+
+        self.send(request).await?;
+        let resp = self.receive().await?;
+        if resp.id != id {
+            return Err(PublishSuccessError::UnexpectedId(resp.id));
+        }
+        if !resp.error.is_empty() {
+            return Err(PublishSuccessError::Remote(resp.error));
+        }
+        let seq = resp
+            .publish
+            .ok_or(PublishSuccessError::ExpectedPublishInResponse)
+            .map(|resp| resp.seq)?;
+
+        // The Testground daemon determines the success or failure of a test
+        // instance by parsing stdout for runtime events.
+        println!(
+            "{}",
+            serde_json::to_string(&LogLine {
+                ts: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
+                event,
+            })?
+        );
+
+        Ok(seq)
+    }
+
     fn next_id(&mut self) -> u64 {
         let next_id = self.next_id;
         self.next_id += 1;
@@ -107,6 +158,7 @@ impl Client {
     }
 
     async fn send(&mut self, req: Request) -> Result<(), SendError> {
+        log::debug!("Sending request: {:?}", req);
         self.sender.send_text(serde_json::to_string(&req)?).await?;
         self.sender.flush().await?;
         Ok(())
@@ -116,18 +168,26 @@ impl Client {
         let mut data = Vec::new();
         self.receiver.receive_data(&mut data).await?;
         let resp = serde_json::from_str(&String::from_utf8(data)?)?;
+        log::debug!("Received response: {:?}", resp);
         Ok(resp)
     }
 }
 
-fn contextualize_state(state: String) -> String {
+fn context_from_env() -> String {
     format!(
-        "run:{}:plan:{}:case:{}:states:{}",
+        "run:{}:plan:{}:case:{}",
         std::env::var("TEST_RUN").unwrap(),
         std::env::var("TEST_PLAN").unwrap(),
         std::env::var("TEST_CASE").unwrap(),
-        state
     )
+}
+
+fn contextualize_state(state: String) -> String {
+    format!("{}:states:{}", context_from_env(), state,)
+}
+
+fn topic() -> String {
+    format!("{}:run_events", context_from_env(),)
 }
 
 #[derive(Error, Debug)]
@@ -157,6 +217,22 @@ pub enum BarrierError {
 }
 
 #[derive(Error, Debug)]
+pub enum PublishSuccessError {
+    #[error("Serde: {0}")]
+    Serde(#[from] serde_json::error::Error),
+    #[error("Remote returned error {0}.")]
+    Remote(String),
+    #[error("Remote returned response with unexpected ID {0}.")]
+    UnexpectedId(String),
+    #[error("Expected remote to return publish entry in response.")]
+    ExpectedPublishInResponse,
+    #[error("Error sending request {0}")]
+    Send(#[from] SendError),
+    #[error("Error receiving response: {0}")]
+    Receive(#[from] ReceiveError),
+}
+
+#[derive(Error, Debug)]
 pub enum SendError {
     #[error("Soketto: {0}")]
     Soketto(#[from] soketto::connection::Error),
@@ -174,22 +250,45 @@ pub enum ReceiveError {
     FromUtf8(#[from] std::string::FromUtf8Error),
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct Request {
     id: String,
     signal_entry: Option<SignalEntryRequest>,
     barrier: Option<BarrierRequest>,
+    publish: Option<PublishRequest>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct SignalEntryRequest {
     state: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct BarrierRequest {
     state: String,
     target: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct PublishRequest {
+    topic: String,
+    payload: Event,
+}
+
+#[derive(Debug, Serialize)]
+struct LogLine {
+    ts: u128,
+    event: Event,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct Event {
+    success_event: SuccessEvent,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SuccessEvent {
+    group: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -197,9 +296,15 @@ struct Response {
     id: String,
     signal_entry: Option<SignalEntryResponse>,
     error: String,
+    publish: Option<PublishResponse>,
 }
 
 #[derive(Deserialize, Debug)]
 struct SignalEntryResponse {
+    seq: u64,
+}
+
+#[derive(Deserialize, Debug)]
+struct PublishResponse {
     seq: u64,
 }
