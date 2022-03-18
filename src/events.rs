@@ -7,6 +7,12 @@ pub struct Event {
     pub event: EventType,
 }
 
+#[derive(Debug, Serialize)]
+pub struct LogLine<'a> {
+    pub ts: u128,
+    pub event: &'a EventType,
+}
+
 #[derive(Serialize, Debug)]
 pub enum EventType {
     #[serde(rename = "start_event")]

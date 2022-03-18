@@ -2,17 +2,17 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use influxdb::{Client, WriteQuery};
-use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 
+use crate::events::LogLine;
 use crate::{
     errors::Error,
     events::{Event, EventType},
     network_conf::NetworkConfiguration,
     params::RunParameters,
-    requests::{PlayloadType, Request, RequestType},
+    requests::{PayloadType, Request, RequestType},
     responses::{Response, ResponseType},
     websocket::WebsocketClient,
 };
@@ -203,7 +203,7 @@ impl BackgroundTask {
             } => {
                 let topic = self.contextualize_topic(&topic);
 
-                self.publish(id, topic, PlayloadType::String(message), sender)
+                self.publish(id, topic, PayloadType::String(message), sender)
                     .await
             }
             Command::Subscribe { topic, stream } => {
@@ -239,7 +239,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PlayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event), sender)
                     .await
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
@@ -263,7 +263,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PlayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event), sender)
                     .await
             }
             Command::NetworkShaping { config, sender } => {
@@ -276,7 +276,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_topic(&topic);
 
-                self.publish(id, topic, PlayloadType::Config(config), sender)
+                self.publish(id, topic, PayloadType::Config(config), sender)
                     .await
             }
             Command::SignalSuccess { sender } => {
@@ -288,7 +288,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PlayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event), sender)
                     .await
             }
             Command::SignalFailure { error, sender } => {
@@ -301,7 +301,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PlayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event), sender)
                     .await
             }
             Command::SignalCrash {
@@ -319,7 +319,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PlayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event), sender)
                     .await
             }
             Command::Metric {
@@ -344,10 +344,10 @@ impl BackgroundTask {
         &mut self,
         id: u64,
         topic: String,
-        payload: PlayloadType,
+        payload: PayloadType,
         sender: oneshot::Sender<Result<u64, Error>>,
     ) {
-        if let PlayloadType::Event(Event { ref event }) = payload {
+        if let PayloadType::Event(Event { ref event }) = payload {
             // The Testground daemon determines the success or failure of a test
             // instance by parsing stdout for runtime events.
             println!(
@@ -504,10 +504,4 @@ impl BackgroundTask {
             }
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-struct LogLine<'a> {
-    ts: u128,
-    event: &'a EventType,
 }

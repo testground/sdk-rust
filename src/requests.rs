@@ -14,7 +14,7 @@ pub struct Request {
 
 #[derive(Serialize, Debug)]
 #[serde(untagged)]
-pub enum PlayloadType {
+pub enum PayloadType {
     Event(Event),
 
     String(String),
@@ -29,10 +29,7 @@ pub enum RequestType {
     #[serde(rename = "barrier")]
     Barrier { state: String, target: u64 },
     #[serde(rename = "publish")]
-    Publish {
-        topic: String,
-        payload: PlayloadType,
-    },
+    Publish { topic: String, payload: PayloadType },
     #[serde(rename = "subscribe")]
     Subscribe { topic: String },
 }
@@ -89,7 +86,7 @@ mod tests {
             request: RequestType::Publish {
                 topic: "run:abcd1234:plan:live_streming:case:quickstart:topics:network:hostname"
                     .to_owned(),
-                payload: PlayloadType::Event(event),
+                payload: PayloadType::Event(event),
             },
         };
 
