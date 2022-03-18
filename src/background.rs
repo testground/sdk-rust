@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use influxdb::{Client, WriteQuery};
+use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
@@ -345,6 +347,22 @@ impl BackgroundTask {
         payload: PlayloadType,
         sender: oneshot::Sender<Result<u64, Error>>,
     ) {
+        if let PlayloadType::Event(Event { ref event }) = payload {
+            // The Testground daemon determines the success or failure of a test
+            // instance by parsing stdout for runtime events.
+            println!(
+                "{}",
+                serde_json::to_string(&LogLine {
+                    ts: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos(),
+                    event,
+                })
+                .unwrap(),
+            );
+        }
+
         let request = Request {
             id: id.to_string(),
             is_cancel: false,
@@ -486,4 +504,10 @@ impl BackgroundTask {
             }
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct LogLine<'a> {
+    ts: u128,
+    event: &'a EventType,
 }
