@@ -141,10 +141,9 @@ impl BackgroundTask {
                 }
                 _ => {}
             };
-
             let (tx, rx) = client.into_builder().finish();
 
-            let socket_packets = futures_util::stream::unfold(rx, move |mut rx| async {
+            let socket_packets = futures::stream::unfold(rx, move |mut rx| async {
                 let mut buf = Vec::new();
                 let ret = match rx.receive_data(&mut buf).await {
                     Ok(_) => Ok(buf),
