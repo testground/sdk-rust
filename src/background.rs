@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use influxdb::{Client, WriteQuery};
 use soketto::handshake::ServerResponse;
 use tokio::sync::{mpsc, oneshot};
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tokio_stream::StreamExt;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::events::LogLine;
@@ -103,7 +103,7 @@ pub struct BackgroundTask {
 
     params: RunParameters,
 
-    client_rx: ReceiverStream<Command>,
+    client_rx: mpsc::Receiver<Command>,
 
     pending_req: HashMap<u64, PendingRequest>,
 }
@@ -155,8 +155,6 @@ impl BackgroundTask {
 
             (tx, futures::stream::StreamExt::boxed(socket_packets))
         };
-
-        let client_rx = ReceiverStream::new(client_rx);
 
         let influxdb = Client::new(params.influxdb_url.clone(), "testground");
 
@@ -215,7 +213,7 @@ impl BackgroundTask {
                         return;
                     },
                 },
-                cmd = self.client_rx.next() => match cmd {
+                cmd = self.client_rx.recv() => match cmd {
                     Some(cmd) => self.command(cmd).await,
                     None => {
                         eprintln!("Client command receiver dropped");
