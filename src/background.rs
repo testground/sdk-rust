@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use futures::stream::StreamExt;
 use influxdb::{Client, WriteQuery};
 use soketto::handshake::ServerResponse;
 use tokio::sync::{mpsc, oneshot};
-use tokio_stream::StreamExt;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::events::LogLine;
@@ -117,7 +117,6 @@ impl BackgroundTask {
             let socket = tokio::net::TcpStream::connect(("testground-sync-service", 5050)).await?;
 
             let mut client = soketto::handshake::Client::new(socket.compat(), "...", "/");
-
             match client.handshake().await? {
                 ServerResponse::Redirect {
                     status_code,
@@ -152,7 +151,7 @@ impl BackgroundTask {
                 Some((ret, rx))
             });
 
-            (tx, futures::stream::StreamExt::boxed(socket_packets))
+            (tx, socket_packets.boxed())
         };
 
         let influxdb = Client::new(params.influxdb_url.clone(), "testground");
