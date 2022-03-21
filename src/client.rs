@@ -13,10 +13,10 @@ use clap::Parser;
 use influxdb::WriteQuery;
 
 use tokio::sync::{
-    mpsc::{self, unbounded_channel, UnboundedSender},
+    mpsc::{self, channel, Sender},
     oneshot,
 };
-use tokio_stream::{wrappers::UnboundedReceiverStream, Stream};
+use tokio_stream::{wrappers::ReceiverStream, Stream};
 
 const BACKGROUND_RECEIVER: &str = "Background Receiver";
 const BACKGROUND_SENDER: &str = "Background Sender";
@@ -24,14 +24,14 @@ const BACKGROUND_SENDER: &str = "Background Sender";
 /// Basic synchronization client enabling one to send signals, await barriers and subscribe or publish to a topic.
 #[derive(Clone)]
 pub struct Client {
-    cmd_tx: UnboundedSender<Command>,
+    cmd_tx: Sender<Command>,
 }
 
 impl Client {
     pub async fn new() -> Result<(Self, RunParameters), Box<dyn std::error::Error>> {
         let params = RunParameters::try_parse()?;
 
-        let (cmd_tx, cmd_rx) = unbounded_channel();
+        let (cmd_tx, cmd_rx) = channel(1);
 
         let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
 
@@ -58,7 +58,7 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)
     }
@@ -68,16 +68,16 @@ impl Client {
         &self,
         topic: impl Into<Cow<'static, str>>,
     ) -> impl Stream<Item = Result<String, Error>> {
-        let (stream, out) = mpsc::unbounded_channel();
+        let (stream, out) = mpsc::channel(1);
 
         let cmd = Command::Subscribe {
             topic: topic.into().into_owned(),
             stream,
         };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
-        UnboundedReceiverStream::new(out)
+        ReceiverStream::new(out)
     }
 
     /// ```signal_and_wait``` composes SignalEntry and Barrier,
@@ -106,7 +106,7 @@ impl Client {
         let state = state.into().into_owned();
         let cmd = Command::SignalEntry { state, sender };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)
     }
@@ -126,7 +126,7 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)
     }
@@ -139,7 +139,7 @@ impl Client {
 
         let cmd = Command::WaitNetworkInitializedStart { sender };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -148,7 +148,7 @@ impl Client {
 
         let cmd = Command::WaitNetworkInitializedBarrier { sender };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -157,7 +157,7 @@ impl Client {
 
         let cmd = Command::WaitNetworkInitializedEnd { sender };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -178,7 +178,7 @@ impl Client {
 
         let cmd = Command::NetworkShaping { sender, config };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -206,7 +206,7 @@ impl Client {
 
         let cmd = Command::SignalSuccess { sender };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -220,7 +220,7 @@ impl Client {
 
         let cmd = Command::SignalFailure { error, sender };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -243,7 +243,7 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
@@ -258,7 +258,7 @@ impl Client {
             sender,
         };
 
-        self.cmd_tx.send(cmd).expect(BACKGROUND_RECEIVER);
+        self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 

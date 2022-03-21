@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use futures::stream::StreamExt;
 use influxdb::{Client, WriteQuery};
+use soketto::handshake::ServerResponse;
 use tokio::sync::{mpsc, oneshot};
-
-use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::events::LogLine;
 use crate::{
@@ -13,12 +14,10 @@ use crate::{
     network_conf::NetworkConfiguration,
     params::RunParameters,
     requests::{PayloadType, Request, RequestType},
-    responses::{Response, ResponseType},
-    websocket::WebsocketClient,
+    responses::{RawResponse, Response, ResponseType},
 };
 
 const WEBSOCKET_RECEIVER: &str = "Websocket Receiver";
-const WEBSOCKET_SENDER: &str = "Websocket Sender";
 
 #[derive(Debug)]
 pub enum Command {
@@ -29,7 +28,7 @@ pub enum Command {
     },
     Subscribe {
         topic: String,
-        stream: mpsc::UnboundedSender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<String, Error>>,
     },
 
     SignalEntry {
@@ -90,13 +89,13 @@ enum PendingRequest {
         sender: oneshot::Sender<Result<(), Error>>,
     },
     Subscribe {
-        stream: mpsc::UnboundedSender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<String, Error>>,
     },
 }
 
 pub struct BackgroundTask {
-    websocket_tx: mpsc::UnboundedSender<(Request, oneshot::Sender<Result<(), Error>>)>,
-    websocket_rx: UnboundedReceiverStream<Result<Response, Error>>,
+    websocket_tx: soketto::Sender<Compat<tokio::net::TcpStream>>,
+    websocket_rx: futures::stream::BoxStream<'static, Result<Vec<u8>, soketto::connection::Error>>,
 
     influxdb: influxdb::Client,
 
@@ -104,25 +103,56 @@ pub struct BackgroundTask {
 
     params: RunParameters,
 
-    client_rx: UnboundedReceiverStream<Command>,
+    client_rx: mpsc::Receiver<Command>,
 
     pending_req: HashMap<u64, PendingRequest>,
 }
 
 impl BackgroundTask {
     pub async fn new(
-        client_rx: mpsc::UnboundedReceiver<Command>,
+        client_rx: mpsc::Receiver<Command>,
         params: RunParameters,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let (websocket_tx, req_rx) = mpsc::unbounded_channel();
-        let (res_tx, websocket_rx) = mpsc::unbounded_channel();
+        let (websocket_tx, websocket_rx) = {
+            let socket = tokio::net::TcpStream::connect(("testground-sync-service", 5050)).await?;
 
-        let web = WebsocketClient::new(res_tx, req_rx).await?;
+            let mut client = soketto::handshake::Client::new(socket.compat(), "...", "/");
+            match client.handshake().await? {
+                ServerResponse::Redirect {
+                    status_code,
+                    location,
+                } => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "Remote redirected to {}. Status code {}",
+                            location, status_code
+                        ),
+                    )
+                    .into())
+                }
+                ServerResponse::Rejected { status_code } => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::ConnectionRefused,
+                        format!("Remote refused connection. Status code {}", status_code),
+                    )
+                    .into())
+                }
+                _ => {}
+            };
+            let (tx, rx) = client.into_builder().finish();
 
-        tokio::spawn(web.run());
+            let socket_packets = futures::stream::unfold(rx, move |mut rx| async {
+                let mut buf = Vec::new();
+                let ret = match rx.receive_data(&mut buf).await {
+                    Ok(_) => Ok(buf),
+                    Err(err) => Err(err),
+                };
+                Some((ret, rx))
+            });
 
-        let client_rx = UnboundedReceiverStream::new(client_rx);
-        let websocket_rx = UnboundedReceiverStream::new(websocket_rx);
+            (tx, socket_packets.boxed())
+        };
 
         let influxdb = Client::new(params.influxdb_url.clone(), "testground");
 
@@ -170,7 +200,7 @@ impl BackgroundTask {
             tokio::select! {
                 res = self.websocket_rx.next() => match res {
                     Some(res) => match res {
-                        Ok(res) => self.response(res).await,
+                        Ok(res) => self.response(serde_json::from_slice::<RawResponse>(&res).expect("Response Deserialization").into()).await,
                         Err(e) => {
                             eprintln!("Web socket Error: {}", e);
                             return;
@@ -181,7 +211,7 @@ impl BackgroundTask {
                         return;
                     },
                 },
-                cmd = self.client_rx.next() => match cmd {
+                cmd = self.client_rx.recv() => match cmd {
                     Some(cmd) => self.command(cmd).await,
                     None => {
                         eprintln!("Client command receiver dropped");
@@ -369,25 +399,17 @@ impl BackgroundTask {
             request: RequestType::Publish { topic, payload },
         };
 
-        let (tx, websocket_rx) = oneshot::channel();
+        self.send(request).await.expect(WEBSOCKET_RECEIVER);
 
-        let msg = (request, tx);
-
-        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
-
-        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
-            let _ = sender.send(Err(e));
-        } else {
-            self.pending_req
-                .insert(id, PendingRequest::PublishOrSignal { sender });
-        }
+        self.pending_req
+            .insert(id, PendingRequest::PublishOrSignal { sender });
     }
 
     async fn subscribe(
         &mut self,
         id: u64,
         topic: String,
-        stream: mpsc::UnboundedSender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<String, Error>>,
     ) {
         let request = Request {
             id: id.to_string(),
@@ -395,18 +417,10 @@ impl BackgroundTask {
             request: RequestType::Subscribe { topic },
         };
 
-        let (tx, websocket_rx) = oneshot::channel();
+        self.send(request).await.expect(WEBSOCKET_RECEIVER);
 
-        let msg = (request, tx);
-
-        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
-
-        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
-            let _ = stream.send(Err(e));
-        } else {
-            self.pending_req
-                .insert(id, PendingRequest::Subscribe { stream });
-        }
+        self.pending_req
+            .insert(id, PendingRequest::Subscribe { stream });
     }
 
     async fn signal(
@@ -421,18 +435,10 @@ impl BackgroundTask {
             request: RequestType::SignalEntry { state },
         };
 
-        let (tx, websocket_rx) = oneshot::channel();
+        self.send(request).await.expect(WEBSOCKET_RECEIVER);
 
-        let msg = (request, tx);
-
-        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
-
-        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
-            let _ = sender.send(Err(e));
-        } else {
-            self.pending_req
-                .insert(id, PendingRequest::PublishOrSignal { sender });
-        }
+        self.pending_req
+            .insert(id, PendingRequest::PublishOrSignal { sender });
     }
 
     async fn barrier(
@@ -448,18 +454,10 @@ impl BackgroundTask {
             request: RequestType::Barrier { state, target },
         };
 
-        let (tx, websocket_rx) = oneshot::channel();
+        self.send(request).await.expect(WEBSOCKET_RECEIVER);
 
-        let msg = (request, tx);
-
-        self.websocket_tx.send(msg).expect(WEBSOCKET_RECEIVER);
-
-        if let Err(e) = websocket_rx.await.expect(WEBSOCKET_SENDER) {
-            let _ = sender.send(Err(e));
-        } else {
-            self.pending_req
-                .insert(id, PendingRequest::Barrier { sender });
-        }
+        self.pending_req
+            .insert(id, PendingRequest::Barrier { sender });
     }
 
     async fn response(&mut self, res: Response) {
@@ -483,7 +481,7 @@ impl BackgroundTask {
                 let _ = stream.send(Err(Error::SyncService(error)));
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Subscribe(msg)) => {
-                if let Err(_) = stream.send(Ok(msg)) {
+                if let Err(_) = stream.send(Ok(msg)).await {
                     return;
                 }
 
@@ -503,5 +501,15 @@ impl BackgroundTask {
                 panic!("No match Request: {:?} Response: {:?}", req, res);
             }
         }
+    }
+
+    async fn send(&mut self, req: Request) -> Result<(), ()> {
+        let mut json = serde_json::to_vec(&req).expect("Request Serialization");
+
+        self.websocket_tx.send_binary_mut(&mut json).await.unwrap();
+
+        self.websocket_tx.flush().await.unwrap();
+
+        Ok(())
     }
 }
