@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use influxdb::{Client, WriteQuery};
 use soketto::handshake::ServerResponse;
 use tokio::sync::{mpsc, oneshot};
-use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::events::LogLine;
@@ -28,7 +28,7 @@ pub enum Command {
     },
     Subscribe {
         topic: String,
-        stream: mpsc::UnboundedSender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<String, Error>>,
     },
 
     SignalEntry {
@@ -89,7 +89,7 @@ enum PendingRequest {
         sender: oneshot::Sender<Result<(), Error>>,
     },
     Subscribe {
-        stream: mpsc::UnboundedSender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<String, Error>>,
     },
 }
 
@@ -103,14 +103,14 @@ pub struct BackgroundTask {
 
     params: RunParameters,
 
-    client_rx: UnboundedReceiverStream<Command>,
+    client_rx: ReceiverStream<Command>,
 
     pending_req: HashMap<u64, PendingRequest>,
 }
 
 impl BackgroundTask {
     pub async fn new(
-        client_rx: mpsc::UnboundedReceiver<Command>,
+        client_rx: mpsc::Receiver<Command>,
         params: RunParameters,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (websocket_tx, websocket_rx) = {
@@ -156,7 +156,7 @@ impl BackgroundTask {
             (tx, futures::stream::StreamExt::boxed(socket_packets))
         };
 
-        let client_rx = UnboundedReceiverStream::new(client_rx);
+        let client_rx = ReceiverStream::new(client_rx);
 
         let influxdb = Client::new(params.influxdb_url.clone(), "testground");
 
@@ -413,7 +413,7 @@ impl BackgroundTask {
         &mut self,
         id: u64,
         topic: String,
-        stream: mpsc::UnboundedSender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<String, Error>>,
     ) {
         let request = Request {
             id: id.to_string(),
@@ -485,7 +485,7 @@ impl BackgroundTask {
                 let _ = stream.send(Err(Error::SyncService(error)));
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Subscribe(msg)) => {
-                if let Err(_) = stream.send(Ok(msg)) {
+                if let Err(_) = stream.send(Ok(msg)).await {
                     return;
                 }
 
