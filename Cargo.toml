@@ -6,14 +6,21 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 name = "testground"
 repository = "https://github.com/testground/sdk-rust/"
-version = "0.1.1"
+version = "0.2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = { version = "1.10", features = [ "attributes" ] }
-log = "0.4"
-serde = { version = "1", features = [ "derive" ] }
-serde_json = "1"
-soketto = "0.7.1"
-thiserror = "1"
+clap = { version = "3", default-features = false, features = ["std", "derive", "env"] }
+futures = { version = "0.3", default-features = false, features = [] }
+influxdb = { version = "0.5", default-features = false, features = ["reqwest", "serde", "serde_json", "derive"] }
+ipnetwork = { version = "0.18.0", default-features = false, features = ["serde"] }
+soketto = { version = "0.7", default-features = false, features = [] }
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+serde_repr = "0.1.7"
+serde_with = { version = "1", default-features = false, features = [] }
+thiserror = { version = "1", default-features = false, features = [] }
+tokio = { version = "1", default-features = false, features = ["sync", "rt-multi-thread", "macros", "net"] }
+tokio-stream = { version = "0.1", default-features = false, features = [] }
+tokio-util = { version = "0.6", default-features = false, features = ["compat"] }
