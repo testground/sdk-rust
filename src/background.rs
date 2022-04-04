@@ -481,12 +481,10 @@ impl BackgroundTask {
                 let _ = stream.send(Err(Error::SyncService(error)));
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Subscribe(msg)) => {
-                if let Err(_) = stream.send(Ok(msg)).await {
-                    return;
+                if stream.send(Ok(msg)).await.is_ok() {
+                    self.pending_req
+                        .insert(idx, PendingRequest::Subscribe { stream });
                 }
-
-                self.pending_req
-                    .insert(idx, PendingRequest::Subscribe { stream });
             }
             (PendingRequest::PublishOrSignal { sender }, ResponseType::SignalEntry { seq }) => {
                 let _ = sender.send(Ok(seq));
