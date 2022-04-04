@@ -69,3 +69,46 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
+
+  testground:
+    name: Testground runs
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          path: sdk-rust
+
+      - name: Checkout testground
+        uses: actions/checkout@v2
+        with:
+          path: testground
+          repository: testground/testground
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.16.x"
+
+      - name: Install testground
+        run: make install
+        working-directory: testground
+
+      - name: Run testground daemon
+        run: testground daemon &
+
+      - name: Import testground plans
+        run: testground plan import --from sdk-rust
+
+      - name: Run testground plan (sdk-rust)
+        run: |
+          testground run single \
+            --plan=sdk-rust \
+            --testcase=example \
+            --builder=docker:generic \
+            --runner=local:docker \
+            --instances=1 \
+            --wait
