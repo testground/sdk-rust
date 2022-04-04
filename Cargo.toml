@@ -23,4 +23,4 @@ serde_with = { version = "1", default-features = false, features = [] }
 thiserror = { version = "1", default-features = false, features = [] }
 tokio = { version = "1", default-features = false, features = ["sync", "rt-multi-thread", "macros", "net"] }
 tokio-stream = { version = "0.1", default-features = false, features = [] }
-tokio-util = { version = "0.6", default-features = false, features = ["compat"] }
+tokio-util = { version = "0.7", default-features = false, features = ["compat"] }
