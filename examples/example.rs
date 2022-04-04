@@ -1,8 +1,8 @@
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut sync_client = testground::sync::Client::new().await?;
+    let (client, _run_parameters) = testground::client::Client::new().await?;
 
-    sync_client.publish_success().await?;
+    client.record_success().await?;
 
     Ok(())
 }
