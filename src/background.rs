@@ -214,7 +214,7 @@ impl BackgroundTask {
                 cmd = self.client_rx.recv() => match cmd {
                     Some(cmd) => self.command(cmd).await,
                     None => {
-                        eprintln!("Client command receiver dropped");
+                        log::debug!("Client command sender dropped. Background task shutting down.");
                         return;
                     },
                 },
