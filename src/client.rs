@@ -194,14 +194,14 @@ impl Client {
             event: EventType::Message { message },
         };
 
-        //TODO implment logger similar to go-sdk
+        //TODO implement logger similar to go-sdk
 
         let json_event = serde_json::to_string(&event).expect("Event Serialization");
 
         println!("{}", json_event);
     }
 
-    pub async fn record_success(&self) -> Result<(), Error> {
+    pub async fn record_success(self) -> Result<(), Error> {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::SignalSuccess { sender };
@@ -213,7 +213,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn record_failure(&self, error: impl Into<Cow<'static, str>>) -> Result<(), Error> {
+    pub async fn record_failure(self, error: impl Into<Cow<'static, str>>) -> Result<(), Error> {
         let error = error.into().into_owned();
 
         let (sender, receiver) = oneshot::channel();
@@ -228,7 +228,7 @@ impl Client {
     }
 
     pub async fn record_crash(
-        &self,
+        self,
         error: impl Into<Cow<'static, str>>,
         stacktrace: impl Into<Cow<'static, str>>,
     ) -> Result<(), Error> {

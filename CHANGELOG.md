@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add  PubSub, Network Shaping & Metrics. See [PR 6].
 
+### Change
+- Take ownership of `Client` when signaling success / failure. See [PR 7].
+
 [PR 6]: https://github.com/testground/sdk-rust/pull/6
+[PR 7]: https://github.com/testground/sdk-rust/pull/7
 
 ## [0.1.1]
 ### Added
