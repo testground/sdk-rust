@@ -1,6 +1,6 @@
 mod background;
 pub mod client;
-mod errors;
+pub mod errors;
 mod events;
 pub mod network_conf;
 mod params;
