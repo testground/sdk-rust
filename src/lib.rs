@@ -8,3 +8,6 @@ mod requests;
 mod responses;
 
 pub use params::RunParameters;
+
+// Re-export public dependencies.
+pub use influxdb::{Timestamp, WriteQuery};
