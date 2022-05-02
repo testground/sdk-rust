@@ -311,7 +311,7 @@ impl BackgroundTask {
             }
             Command::SignalSuccess { sender } => {
                 let event = EventType::Success {
-                    groups: self.params.test_group_id.clone(),
+                    group: self.params.test_group_id.clone(),
                 };
 
                 let topic = self.contextualize_event();
@@ -321,7 +321,7 @@ impl BackgroundTask {
             }
             Command::SignalFailure { error, sender } => {
                 let event = EventType::Failure {
-                    groups: self.params.test_group_id.clone(),
+                    group: self.params.test_group_id.clone(),
                     error,
                 };
 
