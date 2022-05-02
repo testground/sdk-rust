@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::{events::Event, network_conf::NetworkConfiguration};
+use crate::{events::EventType, network_conf::NetworkConfiguration};
 
 #[derive(Serialize, Debug)]
 pub struct Request {
@@ -15,7 +15,7 @@ pub struct Request {
 #[derive(Serialize, Debug)]
 #[serde(untagged)]
 pub enum PayloadType {
-    Event(Event),
+    Event(EventType),
 
     String(String),
 
@@ -71,11 +71,9 @@ mod tests {
             routing_policy: RoutingPolicyType::DenyAll,
         };
 
-        let event = Event {
-            event: EventType::StageStart {
-                name: "network-initialized".to_owned(),
-                group: "single".to_owned(),
-            },
+        let event = EventType::StageStart {
+            name: "network-initialized".to_owned(),
+            group: "single".to_owned(),
         };
 
         let _msg = "123QM 192.168.1.1/25".to_owned();
