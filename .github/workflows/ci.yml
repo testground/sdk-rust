@@ -103,6 +103,9 @@ jobs:
       - name: Import testground plans
         run: testground plan import --from sdk-rust
 
+      - name: Check testground daemon health
+        run: testground healthcheck --runner local:docker --fix
+
       - name: Run testground plan (sdk-rust)
         run: |
           testground run single \
