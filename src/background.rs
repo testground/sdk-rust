@@ -269,7 +269,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event.event), sender)
                     .await
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
@@ -293,7 +293,7 @@ impl BackgroundTask {
 
                 let topic = self.contextualize_event();
 
-                self.publish(id, topic, PayloadType::Event(event), sender)
+                self.publish(id, topic, PayloadType::Event(event.event), sender)
                     .await
             }
             Command::NetworkShaping { config, sender } => {
@@ -310,10 +310,8 @@ impl BackgroundTask {
                     .await
             }
             Command::SignalSuccess { sender } => {
-                let event = Event {
-                    event: EventType::Success {
-                        groups: self.params.test_group_id.clone(),
-                    },
+                let event = EventType::Success {
+                    group: self.params.test_group_id.clone(),
                 };
 
                 let topic = self.contextualize_event();
@@ -322,11 +320,9 @@ impl BackgroundTask {
                     .await
             }
             Command::SignalFailure { error, sender } => {
-                let event = Event {
-                    event: EventType::Failure {
-                        groups: self.params.test_group_id.clone(),
-                        error,
-                    },
+                let event = EventType::Failure {
+                    group: self.params.test_group_id.clone(),
+                    error,
                 };
 
                 let topic = self.contextualize_event();
@@ -339,12 +335,10 @@ impl BackgroundTask {
                 stacktrace,
                 sender,
             } => {
-                let event = Event {
-                    event: EventType::Crash {
-                        groups: self.params.test_group_id.clone(),
-                        error,
-                        stacktrace,
-                    },
+                let event = EventType::Crash {
+                    groups: self.params.test_group_id.clone(),
+                    error,
+                    stacktrace,
                 };
 
                 let topic = self.contextualize_event();
@@ -377,7 +371,7 @@ impl BackgroundTask {
         payload: PayloadType,
         sender: oneshot::Sender<Result<u64, Error>>,
     ) {
-        if let PayloadType::Event(Event { ref event }) = payload {
+        if let PayloadType::Event(ref event) = payload {
             // The Testground daemon determines the success or failure of a test
             // instance by parsing stdout for runtime events.
             println!(

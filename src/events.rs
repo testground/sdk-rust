@@ -20,9 +20,9 @@ pub enum EventType {
     #[serde(rename = "message_event")]
     Message { message: String },
     #[serde(rename = "success_event")]
-    Success { groups: String },
+    Success { group: String },
     #[serde(rename = "failure_event")]
-    Failure { groups: String, error: String },
+    Failure { group: String, error: String },
     #[serde(rename = "crash_event")]
     Crash {
         groups: String,

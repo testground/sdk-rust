@@ -11,8 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Change
 - Take ownership of `Client` when signaling success / failure. See [PR 7].
 
+### Fixed
+- Make events payload compatible with the go-sdk. See [PR 14]
+
 [PR 6]: https://github.com/testground/sdk-rust/pull/6
 [PR 7]: https://github.com/testground/sdk-rust/pull/7
+[PR 14]: https://github.com/testground/sdk-rust/pull/14
 
 ## [0.1.1]
 ### Added
