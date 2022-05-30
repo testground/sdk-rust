@@ -64,7 +64,7 @@ pub struct RunParameters {
 fn parse_key_val(s: &str) -> Result<HashMap<String, String>, String> {
     let mut hashmap = HashMap::new();
 
-    for kv in s.split("|").filter(|&s| !s.is_empty()) {
+    for kv in s.split('|').filter(|&s| !s.is_empty()) {
         let pos = kv
             .find('=')
             .ok_or_else(|| format!("Invalid KEY=VALUE: no '=' found in {}", kv))?;
