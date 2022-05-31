@@ -1,6 +1,6 @@
 # Rust Testground SDK
 
-[![Test Status](https://github.com/testground/sdk-rust/actions/workflows/rust.yml/badge.svg?event=push)](https://github.com/testground/sdk-rust/actions)
+[![CI](https://github.com/testground/sdk-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/testground/sdk-rust/actions/workflows/ci.yml)
 [![Crate](https://img.shields.io/crates/v/testground.svg)](https://crates.io/crates/testground)
 [![API](https://docs.rs/testground/badge.svg)](https://docs.rs/testground)
 
