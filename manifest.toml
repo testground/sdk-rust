@@ -13,3 +13,6 @@ enabled = true
 [[testcases]]
 name = "example"
 instances = { min = 1, max = 1, default = 1 }
+
+  [testcases.params]
+  greeting = { type = "string", desc = "greeting", default = "Hello" }
