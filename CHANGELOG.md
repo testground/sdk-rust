@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] unreleased
 ### Change
-- Change `RunParameters::test_instance_params` from String to HashMap which contains key-value pairs from parsing the parameter string. See [PR 19].
+- Change `RunParameters::test_instance_params` from `String` to `HashMap` which contains key-value pairs from parsing the parameter string. See [PR 19].
 
 [PR 19]: https://github.com/testground/sdk-rust/pull/19
 
