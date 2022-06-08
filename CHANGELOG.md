@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] unreleased
+### Change
+- Change `RunParameters::test_instance_params` from `String` to `HashMap` which contains key-value pairs from parsing the parameter string. See [PR 19].
+
+[PR 19]: https://github.com/testground/sdk-rust/pull/19
+
 ## [0.2.0]
 ### Added
 - Add  PubSub, Network Shaping & Metrics. See [PR 6].

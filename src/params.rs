@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::collections::HashMap;
 
 use std::path::PathBuf;
 
@@ -29,8 +30,8 @@ pub struct RunParameters {
     pub test_instance_count: u64, // TEST_INSTANCE_COUNT: 1
     #[clap(env)]
     pub test_instance_role: String, // TEST_INSTANCE_ROLE:
-    #[clap(env)]
-    pub test_instance_params: String, // TEST_INSTANCE_PARAMS: feature=false|neutral_nodes=10|num=2|word=never
+    #[clap(env, parse(try_from_str = parse_key_val))]
+    pub test_instance_params: HashMap<String, String>, // TEST_INSTANCE_PARAMS: feature=false|neutral_nodes=10|num=2|word=never
 
     #[clap(long, env)]
     pub test_sidecar: bool, // TEST_SIDECAR: true
@@ -58,4 +59,41 @@ pub struct RunParameters {
     #[clap(env)]
     pub redis_host: String, // REDIS_HOST: testground-redis
                             // HOME: /
+}
+
+fn parse_key_val(s: &str) -> Result<HashMap<String, String>, String> {
+    let mut hashmap = HashMap::new();
+
+    for kv in s.split('|').filter(|&s| !s.is_empty()) {
+        let pos = kv
+            .find('=')
+            .ok_or_else(|| format!("Invalid KEY=VALUE: no '=' found in {}", kv))?;
+        hashmap.insert(String::from(&kv[..pos]), String::from(&kv[pos + 1..]));
+    }
+
+    Ok(hashmap)
+}
+
+#[test]
+fn test_parse_key_val() {
+    let result = parse_key_val("feature=false|neutral_nodes=10|num=2|word=never").unwrap();
+    assert_eq!(4, result.len());
+    assert_eq!("false", result.get("feature").unwrap());
+    assert_eq!("10", result.get("neutral_nodes").unwrap());
+    assert_eq!("2", result.get("num").unwrap());
+    assert_eq!("never", result.get("word").unwrap());
+
+    let result = parse_key_val("feature=false").unwrap();
+    assert_eq!(1, result.len());
+    assert_eq!("false", result.get("feature").unwrap());
+
+    let result = parse_key_val("word=ne=ver").unwrap();
+    assert_eq!(1, result.len());
+    assert_eq!("ne=ver", result.get("word").unwrap());
+
+    let result = parse_key_val("").unwrap();
+    assert!(result.is_empty());
+
+    let result = parse_key_val("feature=false|neutral_nodes");
+    assert!(result.is_err());
 }
