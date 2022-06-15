@@ -64,6 +64,7 @@ pub struct RunParameters {
 
 impl RunParameters {
     /// Examines the local network interfaces, and tries to find our assigned IP within the data network.
+    ///
     /// If running in a sidecar-less environment, the loopback address is returned.
     pub fn data_network_ip(&self) -> std::io::Result<Option<IpAddr>> {
         if !self.test_sidecar {
