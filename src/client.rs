@@ -28,16 +28,37 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn new() -> Result<(Self, RunParameters), Box<dyn std::error::Error>> {
+    pub async fn new_and_init() -> Result<(Self, RunParameters), Box<dyn std::error::Error>> {
         let params = RunParameters::try_parse()?;
 
         let (cmd_tx, cmd_rx) = channel(1);
 
         let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
+        let client = Self { cmd_tx };
 
         tokio::spawn(background.run());
 
-        Ok((Self { cmd_tx }, params))
+        client.wait_network_initialized().await?;
+
+        let global_seq_num = client
+            // Note that the sdk-go only signals, but not waits.
+            .signal_and_wait("initialized_global", params.test_instance_count)
+            .await?;
+
+        let group_seq_num = client
+            // Note that the sdk-go only signals, but not waits.
+            .signal_and_wait(
+                format!("initialized_group_{}", params.test_group_id),
+                params.test_group_instance_count as u64,
+            )
+            .await?;
+
+        client.record_message(format!(
+            "claimed sequence numbers; global={}, group({})={}",
+            global_seq_num, params.test_group_id, group_seq_num
+        ));
+
+        Ok((client, params))
     }
 
     /// ```publish``` publishes an item on the supplied topic.
@@ -133,7 +154,7 @@ impl Client {
 
     /// ```wait_network_initialized``` waits for the sidecar to initialize the network,
     /// if the sidecar is enabled.
-    pub async fn wait_network_initialized(&self) -> Result<(), Error> {
+    async fn wait_network_initialized(&self) -> Result<(), Error> {
         // Event
         let (sender, receiver) = oneshot::channel();
 

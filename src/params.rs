@@ -45,6 +45,7 @@ pub struct RunParameters {
     #[clap(env)]
     pub test_capture_profiles: String, // TEST_CAPTURE_PROFILES:
 
+    // TODO: Why is this a usize and the total count a u64?
     #[clap(env)]
     pub test_group_instance_count: usize, // TEST_GROUP_INSTANCE_COUNT: 1
     #[clap(env)]
