@@ -274,9 +274,6 @@ impl BackgroundTask {
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
                 if !self.params.test_sidecar {
-                    // TODO: The Go implementation just returns immediately.
-                    //
-                    // https://github.com/testground/sdk-go/blob/49c90fa754052018b70c63d87b7f1d37f6080a78/network/client.go#L36
                     let _ = sender.send(Err(Error::SideCar));
                     return;
                 }
