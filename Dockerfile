@@ -7,8 +7,7 @@ WORKDIR /usr/src/sdk-rust
 
 RUN mkdir -p ./plan/src/
 RUN echo "fn main() {}" > ./plan/src/main.rs
-COPY ./plan/Cargo.lock ./plan/
-COPY ./plan/Cargo.toml ./plan/
+COPY ./plan/Cargo.* ./plan/
 RUN cd ./plan/ && cargo build
 
 COPY . .
