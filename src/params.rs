@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr};
 
 use std::path::PathBuf;
 
@@ -59,6 +60,26 @@ pub struct RunParameters {
     #[clap(env)]
     pub redis_host: String, // REDIS_HOST: testground-redis
                             // HOME: /
+}
+
+impl RunParameters {
+    /// Examines the local network interfaces, and tries to find our assigned IP
+    /// within the data network.
+    ///
+    /// If running in a sidecar-less environment, the loopback address is
+    /// returned.
+    pub fn data_network_ip(&self) -> std::io::Result<Option<IpAddr>> {
+        if !self.test_sidecar {
+            // This must be a local:exec runner and we currently don't support
+            // traffic shaping on it for now, just return the loopback address.
+            return Ok(Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
+        }
+
+        Ok(if_addrs::get_if_addrs()?
+            .into_iter()
+            .map(|i| i.addr.ip())
+            .find(|ip| self.test_subnet.contains(*ip)))
+    }
 }
 
 fn parse_key_val(s: &str) -> Result<HashMap<String, String>, String> {
