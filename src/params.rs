@@ -71,14 +71,10 @@ impl RunParameters {
             return Ok(Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
         }
 
-        for interface in if_addrs::get_if_addrs()? {
-            let ip = interface.addr.ip();
-            if self.test_subnet.contains(ip) {
-                return Ok(Some(ip));
-            }
-        }
-
-        Ok(None)
+        Ok(if_addrs::get_if_addrs()?
+            .into_iter()
+            .map(|i| i.addr.ip())
+            .find(|ip| self.test_subnet.contains(*ip)))
     }
 }
 
