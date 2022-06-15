@@ -68,7 +68,7 @@ impl RunParameters {
     /// If running in a sidecar-less environment, the loopback address is returned.
     pub fn data_network_ip(&self) -> std::io::Result<Option<IpAddr>> {
         if !self.test_sidecar {
-            // this must be a local:exec runner and we currently don't support traffic shaping on it for now, just return the loopback address.
+            // This must be a local:exec runner and we currently don't support traffic shaping on it for now, just return the loopback address.
             return Ok(Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
         }
 
