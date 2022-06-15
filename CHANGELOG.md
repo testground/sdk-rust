@@ -5,10 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] unreleased
+### Added
+
+- Add `RunParameters::data_network_ip` for ease of finding the IP within the data network assigned to the instance. See [PR 22].
+
 ### Change
 - Change `RunParameters::test_instance_params` from `String` to `HashMap` which contains key-value pairs from parsing the parameter string. See [PR 19].
 
 [PR 19]: https://github.com/testground/sdk-rust/pull/19
+[PR 22]: https://github.com/testground/sdk-rust/pull/22
 
 ## [0.2.0]
 ### Added
