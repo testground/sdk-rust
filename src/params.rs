@@ -46,7 +46,7 @@ pub struct RunParameters {
     pub test_capture_profiles: String, // TEST_CAPTURE_PROFILES:
 
     #[clap(env)]
-    pub test_group_instance_count: usize, // TEST_GROUP_INSTANCE_COUNT: 1
+    pub test_group_instance_count: u64, // TEST_GROUP_INSTANCE_COUNT: 1
     #[clap(env)]
     pub test_group_id: String, // TEST_GROUP_ID: single
 
