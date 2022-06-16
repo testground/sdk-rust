@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn serde_test() {
         let _network_conf = NetworkConfiguration {
-            network: DEAFULT_DATA_NETWORK.to_owned(),
+            network: DEFAULT_DATA_NETWORK.to_owned(),
             ipv4: Some(Ipv4Network::new(Ipv4Addr::new(16, 0, 1, 1), 24).unwrap()),
             ipv6: None,
             enable: true,
