@@ -98,7 +98,8 @@ jobs:
         working-directory: testground
 
       - name: Run testground daemon
-        run: testground daemon &
+        run: testground daemon > daemon.out 2> daemon.err &
+        working-directory: testground
 
       - name: Import testground plans
         run: testground plan import --from sdk-rust
@@ -108,38 +109,20 @@ jobs:
 
       - name: Run testground plan (sdk-rust)
         run: |
-          testground run single \
-            --plan=sdk-rust \
-            --testcase=example \
-            --builder=docker:generic \
-            --runner=local:docker \
-            --instances=1 \
-            --wait | tee run.out
-      - name: Check testground output (sdk-rust)
-        run: |
-          TG_ID=$(awk '/run is queued with ID/ {print $10}' <run.out)
-          testground status -t "${TG_ID}" --extended  | tee extendedstatus.out
-          extstatus=$(awk '/Result/ {getline; print $0}' <extendedstatus.out)
-          extstatus=$(echo "${extstatus}" | tr -d "[:cntrl:]" |  sed 's/\[0m//g')
-          if [ "${extstatus}" == "null" ]
-          then
-            echo "${OUTPUT_OUTCOME}failure/canceled"
-            exit 1
-          fi
+          testground run single       \
+            --plan=sdk-rust           \
+            --testcase=example        \
+            --builder=docker:generic  \
+            --runner=local:docker     \
+            --instances=1             \
+            --wait                    \
+            --collect                 \
+            --collect-file ./result.tgz | tee run.out
 
-          outcome=$(echo "${extstatus}" | jq ".outcome")
-
-          echo "the extended status was ${extstatus}"
-          echo "The outcome of this test was ${outcome}"
-          echo "${OUTPUT_OUTCOME}${outcome}"
-
-          testground collect --runner "${TG_RUNNER}" "${TG_ID}"
-          mv "${TG_ID}.tgz" ~/testground_output.tgz
-
-          test "${outcome}" = "\"success\"" && exit 0 || exit 1
       - uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: testground-output
           path: |
-            ~/testground_output.tgz
+            testground/daemon.*
+            result.tgz
