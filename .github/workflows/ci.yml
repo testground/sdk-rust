@@ -124,7 +124,7 @@ jobs:
             --instances=1             \
             --wait                    \
             --collect                 \
-            --collect-file ./result.tgz | tee run.out
+            --collect-file ./result.tgz
 
       - uses: actions/upload-artifact@v3
         if: ${{ always() }}
