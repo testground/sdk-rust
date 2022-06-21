@@ -105,7 +105,14 @@ jobs:
         run: testground plan import --from sdk-rust
 
       - name: Check testground daemon health
-        run: testground healthcheck --runner local:docker --fix
+        run:
+          echo "Waiting for Testground to launch on 8042...";
+          while ! nc -z localhost 8042; do
+            sleep 1;
+          done;
+          echo "Testground launched";
+          testground healthcheck --runner local:docker --fix;
+        shell: bash
 
       - name: Run testground plan (sdk-rust)
         run: |
