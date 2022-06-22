@@ -64,7 +64,7 @@ pub struct LinkRule {
     pub subnet: IpNetwork,
 }
 
-pub const DEAFULT_DATA_NETWORK: &str = "default";
+pub const DEFAULT_DATA_NETWORK: &str = "default";
 
 #[derive(Serialize, Debug)]
 pub enum RoutingPolicyType {
@@ -132,7 +132,7 @@ mod tests {
         let output = r#"{"network":"default","IPv4":"16.0.1.1/24","IPv6":null,"enable":true,"default":{"latency":10000000,"jitter":0,"bandwidth":1048576,"filter":0,"loss":0.0,"corrupt":0.0,"corrupt_corr":0.0,"reorder":0.0,"reorder_corr":0.0,"duplicate":0.0,"duplicate_corr":0.0},"rules":null,"callback_state":"latency-reduced","routing_policy":"deny_all"}"#;
 
         let network_conf = NetworkConfiguration {
-            network: DEAFULT_DATA_NETWORK.to_owned(),
+            network: DEFAULT_DATA_NETWORK.to_owned(),
             ipv4: Some(Ipv4Network::new(Ipv4Addr::new(16, 0, 1, 1), 24).unwrap()),
             ipv6: None,
             enable: true,
