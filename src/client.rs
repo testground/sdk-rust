@@ -25,6 +25,10 @@ const BACKGROUND_SENDER: &str = "Background Sender";
 #[derive(Clone)]
 pub struct Client {
     cmd_tx: Sender<Command>,
+    /// A global sequence number assigned to this test instance by the sync service.
+    pub global_seq: u64,
+    /// A group-scoped sequence number assigned to this test instance by the sync service.
+    pub group_seq: u64,
 }
 
 impl Client {
@@ -34,7 +38,12 @@ impl Client {
         let (cmd_tx, cmd_rx) = channel(1);
 
         let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
-        let client = Self { cmd_tx };
+        // `global_seq` and `group_seq` are initialized by 0 at this point since no way to signal to the sync service.
+        let mut client = Self {
+            cmd_tx,
+            global_seq: 0,
+            group_seq: 0,
+        };
 
         tokio::spawn(background.run());
 
@@ -57,6 +66,9 @@ impl Client {
             "claimed sequence numbers; global={}, group({})={}",
             global_seq_num, params.test_group_id, group_seq_num
         ));
+
+        client.global_seq = global_seq_num;
+        client.group_seq = group_seq_num;
 
         Ok((client, params))
     }
