@@ -25,6 +25,8 @@ const BACKGROUND_SENDER: &str = "Background Sender";
 #[derive(Clone)]
 pub struct Client {
     cmd_tx: Sender<Command>,
+    /// The runtime parameters for this test.
+    pub run_parameters: RunParameters,
     /// A global sequence number assigned to this test instance by the sync service.
     pub global_seq: u64,
     /// A group-scoped sequence number assigned to this test instance by the sync service.
@@ -32,15 +34,16 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn new_and_init() -> Result<(Self, RunParameters), Box<dyn std::error::Error>> {
-        let params = RunParameters::try_parse()?;
+    pub async fn new_and_init() -> Result<Self, Box<dyn std::error::Error>> {
+        let run_parameters = RunParameters::try_parse()?;
 
         let (cmd_tx, cmd_rx) = channel(1);
 
-        let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
+        let background = BackgroundTask::new(cmd_rx, run_parameters.clone()).await?;
         // `global_seq` and `group_seq` are initialized by 0 at this point since no way to signal to the sync service.
         let mut client = Self {
             cmd_tx,
+            run_parameters,
             global_seq: 0,
             group_seq: 0,
         };
@@ -51,26 +54,29 @@ impl Client {
 
         let global_seq_num = client
             // Note that the sdk-go only signals, but not waits.
-            .signal_and_wait("initialized_global", params.test_instance_count)
+            .signal_and_wait(
+                "initialized_global",
+                client.run_parameters.test_instance_count,
+            )
             .await?;
 
         let group_seq_num = client
             // Note that the sdk-go only signals, but not waits.
             .signal_and_wait(
-                format!("initialized_group_{}", params.test_group_id),
-                params.test_group_instance_count as u64,
+                format!("initialized_group_{}", client.run_parameters.test_group_id),
+                client.run_parameters.test_group_instance_count as u64,
             )
             .await?;
 
         client.record_message(format!(
             "claimed sequence numbers; global={}, group({})={}",
-            global_seq_num, params.test_group_id, group_seq_num
+            global_seq_num, client.run_parameters.test_group_id, group_seq_num
         ));
 
         client.global_seq = global_seq_num;
         client.group_seq = group_seq_num;
 
-        Ok((client, params))
+        Ok(client)
     }
 
     /// ```publish``` publishes an item on the supplied topic.

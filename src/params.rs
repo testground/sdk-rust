@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use ipnetwork::IpNetwork;
 
 #[derive(Parser, Debug, Clone)]
+/// RunParameters encapsulates the runtime parameters for this test.
 pub struct RunParameters {
     #[clap(env)]
     pub test_plan: String, // TEST_PLAN: streaming_test
