@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Change
 - Don't wait for network when no sidecar. See [PR 27].
 
+- Make `RunParameters::test_group_instance_count` a `u64` to be consistent with
+  `RunParameters::test_instance_count`. See [PR 26].
+
+- Replace `Client::new` with `Client::new_and_init`, waiting for the network to
+  initialize, claiming global and group sequence numbers, as well as waiting for
+  other instances to do the same. Also makes `Client::wait_network_initialized`
+  private, as it is included in `Client::new_and_init` now. See [PR 25].
+
+[PR 26]: https://github.com/testground/sdk-rust/pull/26
+[PR 26]: https://github.com/testground/sdk-rust/pull/25
 [PR 27]: https://github.com/testground/sdk-rust/pull/27
 
 ## [0.3.0]

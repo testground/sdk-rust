@@ -1,6 +1,6 @@
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (client, run_parameters) = testground::client::Client::new().await?;
+    let (client, run_parameters) = testground::client::Client::new_and_init().await?;
 
     client.record_message(format!(
         "{}, sdk-rust!",
