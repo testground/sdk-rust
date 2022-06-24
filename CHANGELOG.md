@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - unreleased
 ### Change
+- Don't wait for network when no sidecar. See [PR 27].
+
 - Make `RunParameters::test_group_instance_count` a `u64` to be consistent with
   `RunParameters::test_instance_count`. See [PR 26].
 
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [PR 26]: https://github.com/testground/sdk-rust/pull/26
 [PR 26]: https://github.com/testground/sdk-rust/pull/25
+[PR 27]: https://github.com/testground/sdk-rust/pull/27
 
 ## [0.3.0]
 ### Added

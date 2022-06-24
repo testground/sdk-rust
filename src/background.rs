@@ -274,7 +274,10 @@ impl BackgroundTask {
             }
             Command::WaitNetworkInitializedBarrier { sender } => {
                 if !self.params.test_sidecar {
-                    let _ = sender.send(Err(Error::SideCar));
+                    log::debug!(
+                        "Running in environment without network side car. \
+                        Skipping wait for network."
+                    );
                     return;
                 }
 
