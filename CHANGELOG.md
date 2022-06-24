@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.4.0] - unreleased
+### Added
+- Add `global_seq` and `group_seq` to `Client`, sequence numbers assigned to test instance by the sync service. See [PR 29]
+
 ### Change
 - Make `RunParameters::test_group_instance_count` a `u64` to be consistent with
   `RunParameters::test_instance_count`. See [PR 26].
@@ -14,8 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other instances to do the same. Also makes `Client::wait_network_initialized`
   private, as it is included in `Client::new_and_init` now. See [PR 25].
 
+- Move `RunParameters` to a field on `Client`. See [PR 29].
+
 [PR 26]: https://github.com/testground/sdk-rust/pull/26
 [PR 26]: https://github.com/testground/sdk-rust/pull/25
+[PR 29]: https://github.com/testground/sdk-rust/pull/29
 
 ## [0.3.0]
 ### Added
