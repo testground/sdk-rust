@@ -26,11 +26,11 @@ const BACKGROUND_SENDER: &str = "Background Sender";
 pub struct Client {
     cmd_tx: Sender<Command>,
     /// The runtime parameters for this test.
-    pub run_parameters: RunParameters,
+    run_parameters: RunParameters,
     /// A global sequence number assigned to this test instance by the sync service.
-    pub global_seq: u64,
+    global_seq: u64,
     /// A group-scoped sequence number assigned to this test instance by the sync service.
-    pub group_seq: u64,
+    group_seq: u64,
 }
 
 impl Client {
@@ -302,5 +302,20 @@ impl Client {
         receiver.await.expect(BACKGROUND_SENDER)?;
 
         Ok(())
+    }
+
+    /// Returns runtime parameters for this test.
+    pub fn run_parameters(&self) -> RunParameters {
+        self.run_parameters.clone()
+    }
+
+    /// Returns a global sequence number assigned to this test instance.
+    pub fn global_seq(&self) -> u64 {
+        self.global_seq
+    }
+
+    /// Returns a group-scoped sequence number assigned to this test instance.
+    pub fn group_seq(&self) -> u64 {
+        self.group_seq
     }
 }

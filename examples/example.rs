@@ -5,7 +5,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.record_message(format!(
         "{}, sdk-rust!",
         client
-            .run_parameters
+            .run_parameters()
             .test_instance_params
             .get("greeting")
             .unwrap()
