@@ -25,16 +25,28 @@ const BACKGROUND_SENDER: &str = "Background Sender";
 #[derive(Clone)]
 pub struct Client {
     cmd_tx: Sender<Command>,
+    /// The runtime parameters for this test.
+    run_parameters: RunParameters,
+    /// A global sequence number assigned to this test instance by the sync service.
+    global_seq: u64,
+    /// A group-scoped sequence number assigned to this test instance by the sync service.
+    group_seq: u64,
 }
 
 impl Client {
-    pub async fn new_and_init() -> Result<(Self, RunParameters), Box<dyn std::error::Error>> {
-        let params = RunParameters::try_parse()?;
+    pub async fn new_and_init() -> Result<Self, Box<dyn std::error::Error>> {
+        let run_parameters = RunParameters::try_parse()?;
 
         let (cmd_tx, cmd_rx) = channel(1);
 
-        let background = BackgroundTask::new(cmd_rx, params.clone()).await?;
-        let client = Self { cmd_tx };
+        let background = BackgroundTask::new(cmd_rx, run_parameters.clone()).await?;
+        // `global_seq` and `group_seq` are initialized by 0 at this point since no way to signal to the sync service.
+        let mut client = Self {
+            cmd_tx,
+            run_parameters,
+            global_seq: 0,
+            group_seq: 0,
+        };
 
         tokio::spawn(background.run());
 
@@ -42,23 +54,29 @@ impl Client {
 
         let global_seq_num = client
             // Note that the sdk-go only signals, but not waits.
-            .signal_and_wait("initialized_global", params.test_instance_count)
+            .signal_and_wait(
+                "initialized_global",
+                client.run_parameters.test_instance_count,
+            )
             .await?;
 
         let group_seq_num = client
             // Note that the sdk-go only signals, but not waits.
             .signal_and_wait(
-                format!("initialized_group_{}", params.test_group_id),
-                params.test_group_instance_count as u64,
+                format!("initialized_group_{}", client.run_parameters.test_group_id),
+                client.run_parameters.test_group_instance_count as u64,
             )
             .await?;
 
         client.record_message(format!(
             "claimed sequence numbers; global={}, group({})={}",
-            global_seq_num, params.test_group_id, group_seq_num
+            global_seq_num, client.run_parameters.test_group_id, group_seq_num
         ));
 
-        Ok((client, params))
+        client.global_seq = global_seq_num;
+        client.group_seq = group_seq_num;
+
+        Ok(client)
     }
 
     /// ```publish``` publishes an item on the supplied topic.
@@ -284,5 +302,20 @@ impl Client {
         receiver.await.expect(BACKGROUND_SENDER)?;
 
         Ok(())
+    }
+
+    /// Returns runtime parameters for this test.
+    pub fn run_parameters(&self) -> RunParameters {
+        self.run_parameters.clone()
+    }
+
+    /// Returns a global sequence number assigned to this test instance.
+    pub fn global_seq(&self) -> u64 {
+        self.global_seq
+    }
+
+    /// Returns a group-scoped sequence number assigned to this test instance.
+    pub fn group_seq(&self) -> u64 {
+        self.group_seq
     }
 }
