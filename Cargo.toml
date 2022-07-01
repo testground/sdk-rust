@@ -15,7 +15,7 @@ clap = { version = "3", default-features = false, features = ["std", "derive", "
 futures = { version = "0.3", default-features = false, features = [] }
 if-addrs = "0.7.0"
 influxdb = { version = "0.5", default-features = false, features = ["reqwest", "serde", "serde_json", "derive"] }
-ipnetwork = { version = "0.19.0", default-features = false, features = ["serde"] }
+ipnetwork = { version = "0.20.0", default-features = false, features = ["serde"] }
 log = "0.4"
 soketto = { version = "0.7", default-features = false, features = [] }
 serde = { version = "1", default-features = false, features = ["derive"] }
