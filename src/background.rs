@@ -23,12 +23,12 @@ const WEBSOCKET_RECEIVER: &str = "Websocket Receiver";
 pub enum Command {
     Publish {
         topic: String,
-        message: String,
+        message: serde_json::Value,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
     Subscribe {
         topic: String,
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<serde_json::Value, Error>>,
     },
 
     SignalEntry {
@@ -89,7 +89,7 @@ enum PendingRequest {
         sender: oneshot::Sender<Result<(), Error>>,
     },
     Subscribe {
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<serde_json::Value, Error>>,
     },
 }
 
@@ -233,7 +233,7 @@ impl BackgroundTask {
             } => {
                 let topic = self.contextualize_topic(&topic);
 
-                self.publish(id, topic, PayloadType::String(message), sender)
+                self.publish(id, topic, PayloadType::Json(message), sender)
                     .await
             }
             Command::Subscribe { topic, stream } => {
@@ -406,7 +406,7 @@ impl BackgroundTask {
         &mut self,
         id: u64,
         topic: String,
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<serde_json::Value, Error>>,
     ) {
         let request = Request {
             id: id.to_string(),
