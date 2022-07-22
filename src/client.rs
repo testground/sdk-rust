@@ -87,7 +87,7 @@ impl Client {
     pub async fn publish(
         &self,
         topic: impl Into<Cow<'static, str>>,
-        message: impl Into<Cow<'static, str>>,
+        message: impl Into<Cow<'static, serde_json::Value>>,
     ) -> Result<u64, Error> {
         let (sender, receiver) = oneshot::channel();
 

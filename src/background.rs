@@ -23,7 +23,7 @@ const WEBSOCKET_RECEIVER: &str = "Websocket Receiver";
 pub enum Command {
     Publish {
         topic: String,
-        message: String,
+        message: serde_json::Value,
         sender: oneshot::Sender<Result<u64, Error>>,
     },
     Subscribe {
@@ -233,7 +233,7 @@ impl BackgroundTask {
             } => {
                 let topic = self.contextualize_topic(&topic);
 
-                self.publish(id, topic, PayloadType::String(message), sender)
+                self.publish(id, topic, PayloadType::JSON(message), sender)
                     .await
             }
             Command::Subscribe { topic, stream } => {
