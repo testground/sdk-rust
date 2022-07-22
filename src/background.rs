@@ -233,7 +233,7 @@ impl BackgroundTask {
             } => {
                 let topic = self.contextualize_topic(&topic);
 
-                self.publish(id, topic, PayloadType::JSON(message), sender)
+                self.publish(id, topic, PayloadType::Json(message), sender)
                     .await
             }
             Command::Subscribe { topic, stream } => {
