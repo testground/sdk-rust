@@ -11,6 +11,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap()
     ));
 
+    client
+        .publish("demonstration", serde_json::json!({"foo": "bar"}))
+        .await?;
+
     client.record_success().await?;
 
     Ok(())
