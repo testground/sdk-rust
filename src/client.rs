@@ -106,7 +106,7 @@ impl Client {
     pub async fn subscribe(
         &self,
         topic: impl Into<Cow<'static, str>>,
-    ) -> impl Stream<Item = Result<String, Error>> {
+    ) -> impl Stream<Item = Result<serde_json::Value, Error>> {
         let (stream, out) = mpsc::channel(1);
 
         let cmd = Command::Subscribe {

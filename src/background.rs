@@ -28,7 +28,7 @@ pub enum Command {
     },
     Subscribe {
         topic: String,
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<serde_json::Value, Error>>,
     },
 
     SignalEntry {
@@ -89,7 +89,7 @@ enum PendingRequest {
         sender: oneshot::Sender<Result<(), Error>>,
     },
     Subscribe {
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<serde_json::Value, Error>>,
     },
 }
 
@@ -406,7 +406,7 @@ impl BackgroundTask {
         &mut self,
         id: u64,
         topic: String,
-        stream: mpsc::Sender<Result<String, Error>>,
+        stream: mpsc::Sender<Result<serde_json::Value, Error>>,
     ) {
         let request = Request {
             id: id.to_string(),
