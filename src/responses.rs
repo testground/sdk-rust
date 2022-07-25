@@ -1,5 +1,23 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_with::rust::string_empty_as_none;
+
+fn json_empty_string_is_none<'de, D>(data: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Deserialize::deserialize(data)?;
+
+    match value {
+        Some(v) => {
+            if v.is_string() && v.as_str().unwrap().is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(v))
+            }
+        }
+        None => Ok(None),
+    }
+}
 
 #[derive(Deserialize, Debug)]
 pub struct SignalEntry {
@@ -18,6 +36,7 @@ pub struct RawResponse {
     #[serde(with = "string_empty_as_none")]
     pub error: Option<String>,
 
+    #[serde(deserialize_with = "json_empty_string_is_none")]
     pub subscribe: Option<serde_json::Value>,
 
     pub signal_entry: Option<SignalEntry>,
@@ -85,7 +104,7 @@ mod tests {
     #[test]
     fn serde_test() {
         let raw_response =
-            "{\"id\":\"0\",\"error\":\"\",\"publish\":{\"seq\":1},\"signal_entry\":null}";
+            "{\"id\":\"0\",\"error\":\"\",\"subscribe\":\"\",\"publish\":{\"seq\":1},\"signal_entry\":null}";
 
         let response: RawResponse = serde_json::from_str(raw_response).unwrap();
 
