@@ -1,23 +1,5 @@
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_with::rust::string_empty_as_none;
-
-fn json_empty_string_is_none<'de, D>(data: D) -> Result<Option<serde_json::Value>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value: Option<serde_json::Value> = Deserialize::deserialize(data)?;
-
-    match value {
-        Some(v) => {
-            if v.is_string() && v.as_str().unwrap().is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(v))
-            }
-        }
-        None => Ok(None),
-    }
-}
 
 #[derive(Deserialize, Debug)]
 pub struct SignalEntry {
@@ -36,8 +18,8 @@ pub struct RawResponse {
     #[serde(with = "string_empty_as_none")]
     pub error: Option<String>,
 
-    #[serde(deserialize_with = "json_empty_string_is_none")]
-    pub subscribe: Option<serde_json::Value>,
+    #[serde(with = "string_empty_as_none")]
+    pub subscribe: Option<String>,
 
     pub signal_entry: Option<SignalEntry>,
 
@@ -72,11 +54,15 @@ impl From<RawResponse> for Response {
         let response = match (error, subscribe, signal_entry, publish) {
             (None, None, None, None) => ResponseType::Barrier,
             (Some(error), None, None, None) => {
-                //Hack to remove extra escape characters
+                // Hack to remove extra escape characters
                 let error = serde_json::from_str(&error).expect("JSON Deserialization");
                 ResponseType::Error(error)
             }
-            (None, Some(msg), None, None) => ResponseType::Subscribe(msg),
+            (None, Some(msg), None, None) => {
+                // the Subscribe payload is a json encoded string, so we need to deserialize it
+                let payload = serde_json::from_str(&msg).expect("JSON Deserialization");
+                ResponseType::Subscribe(payload)
+            }
             (None, None, Some(signal), None) => ResponseType::SignalEntry { seq: signal.seq },
             (None, None, None, Some(publish)) => ResponseType::Publish { seq: publish.seq },
             (error, subscribe, signal_entry, publish) => {
@@ -120,7 +106,7 @@ mod tests {
     }
     #[test]
     fn serde_test_complex_subscribe() {
-        let raw_response = "{\"id\":\"1\",\"error\":\"\",\"subscribe\":{\"Addrs\":[\"/ip4/16.3.0.3/tcp/45369\"],\"ID\":\"QmbSLMEMackm7vHiUGMB2EFAPbzeJNpeB9yTpzYKoojDWc\"}}";
+        let raw_response = "{\"id\":\"1\",\"error\":\"\",\"subscribe\":\"{\\\"Addrs\\\":[\\\"/ip4/16.3.0.3/tcp/45369\\\"],\\\"ID\\\":\\\"QmbSLMEMackm7vHiUGMB2EFAPbzeJNpeB9yTpzYKoojDWc\\\"}\"}";
 
         let response: RawResponse = serde_json::from_str(raw_response).unwrap();
 
