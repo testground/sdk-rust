@@ -114,7 +114,7 @@ jobs:
           testground healthcheck --runner local:docker --fix;
         shell: bash
 
-      - name: Run testground plan (sdk-rust)
+      - name: Run testground plan (case=example)
         run: |
           testground run single       \
             --plan=sdk-rust           \
@@ -124,7 +124,19 @@ jobs:
             --instances=1             \
             --wait                    \
             --collect                 \
-            --collect-file ./result.tgz
+            --collect-file ./result_example.tgz
+
+      - name: Run testground plan (case=publish-subscribe)
+        run: |
+          testground run single          \
+            --plan=sdk-rust              \
+            --testcase=publish-subscribe \
+            --builder=docker:generic     \
+            --runner=local:docker        \
+            --instances=2                \
+            --wait                       \
+            --collect                    \
+            --collect-file ./result_publish_subscribe.tgz
 
       - uses: actions/upload-artifact@v3
         if: ${{ always() }}
@@ -132,4 +144,4 @@ jobs:
           name: testground-output
           path: |
             testground/daemon.*
-            result.tgz
+            result*.tgz
