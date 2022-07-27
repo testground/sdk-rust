@@ -59,7 +59,7 @@ impl From<RawResponse> for Response {
                 ResponseType::Error(error)
             }
             (None, Some(msg), None, None) => {
-                // the Subscribe payload is a json encoded string, so we need to deserialize it
+                // The Subscribe payload is a json encoded string, so we need to deserialize it.
                 let payload = serde_json::from_str(&msg).expect("JSON Deserialization");
                 ResponseType::Subscribe(payload)
             }
