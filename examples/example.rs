@@ -23,8 +23,6 @@ async fn example(client: testground::client::Client) -> Result<(), Box<dyn std::
             .unwrap()
     ));
 
-    let json = serde_json::json!({"foo": "bar"});
-    client.publish("demonstration", Cow::Owned(json)).await?;
     client.record_success().await?;
 
     Ok(())
