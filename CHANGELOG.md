@@ -21,10 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other instances to do the same. Also makes `Client::wait_network_initialized`
   private, as it is included in `Client::new_and_init` now. See [PR 25].
 
+- Use a JSON Payload instead of string in `publish` and `subscribe`. See [PR 34].
+
 [PR 26]: https://github.com/testground/sdk-rust/pull/26
 [PR 25]: https://github.com/testground/sdk-rust/pull/25
 [PR 27]: https://github.com/testground/sdk-rust/pull/27
 [PR 29]: https://github.com/testground/sdk-rust/pull/29
+[PR 34]: https://github.com/testground/sdk-rust/pull/34
 
 ## [0.3.0]
 ### Added
