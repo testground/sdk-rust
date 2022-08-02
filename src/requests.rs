@@ -17,7 +17,7 @@ pub struct Request {
 pub enum PayloadType {
     Event(EventType),
 
-    String(String),
+    Json(serde_json::Value),
 
     Config(NetworkConfiguration),
 }
