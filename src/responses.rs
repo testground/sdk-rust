@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serde_with::rust::string_empty_as_none;
+use serde_with::{serde_as, NoneAsEmptyString};
 
 #[derive(Deserialize, Debug)]
 pub struct SignalEntry {
@@ -11,14 +11,15 @@ pub struct Publish {
     pub seq: u64,
 }
 
+#[serde_as]
 #[derive(Deserialize, Debug)]
 pub struct RawResponse {
     pub id: String,
 
-    #[serde(with = "string_empty_as_none")]
+    #[serde_as(as = "NoneAsEmptyString")]
     pub error: Option<String>,
 
-    #[serde(with = "string_empty_as_none")]
+    #[serde_as(as = "NoneAsEmptyString")]
     pub subscribe: Option<String>,
 
     pub signal_entry: Option<SignalEntry>,
