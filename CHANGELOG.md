@@ -23,11 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Use a JSON Payload instead of string in `publish` and `subscribe`. See [PR 34].
 
+- Make footgun `Client::subscribe` explicit, requiring user to provide a
+  capacity. See [PR 36].
+
 [PR 26]: https://github.com/testground/sdk-rust/pull/26
 [PR 25]: https://github.com/testground/sdk-rust/pull/25
 [PR 27]: https://github.com/testground/sdk-rust/pull/27
 [PR 29]: https://github.com/testground/sdk-rust/pull/29
 [PR 34]: https://github.com/testground/sdk-rust/pull/34
+[PR 36]: https://github.com/testground/sdk-rust/pull/36
 
 ## [0.3.0]
 ### Added
