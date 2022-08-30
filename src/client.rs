@@ -114,7 +114,7 @@ impl Client {
     /// ```no_run
     /// # use testground::client::Client;
     /// # let client: Client = todo!();
-    /// client.subscribe("my_topic", usize::MAX);
+    /// client.subscribe("my_topic", u16::MAX.into());
     /// ```
     pub async fn subscribe(
         &self,
