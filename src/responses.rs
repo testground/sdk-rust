@@ -27,7 +27,7 @@ pub struct RawResponse {
     pub publish: Option<Publish>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ResponseType {
     SignalEntry { seq: u64 },
     Publish { seq: u64 },
@@ -36,7 +36,7 @@ pub enum ResponseType {
     Barrier,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Response {
     pub id: String,
     pub response: ResponseType,
