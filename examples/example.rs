@@ -48,7 +48,7 @@ async fn publish_subscribe(
             ));
 
             let payload = client
-                .subscribe("demonstration")
+                .subscribe("demonstration", u16::MAX.into())
                 .await
                 .take(1)
                 .map(|x| x.unwrap())

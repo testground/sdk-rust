@@ -102,12 +102,26 @@ impl Client {
         receiver.await.expect(BACKGROUND_SENDER)
     }
 
-    /// ```subscribe``` subscribes to a topic, consuming ordered, elements from index 0.
+    /// ```subscribe``` subscribes to a topic, consuming ordered, elements from
+    /// index 0.
+    ///
+    /// Note that once the capacity of the returned [`Stream`] is reached, the
+    /// background task blocks and thus all work related to the [`Client`] will
+    /// pause until elements from the [`Stream`] are consumed and thus capacity
+    /// is freed. Callers of [`Client::subscribe`] should either set a high
+    /// capacity, continuously read from the returned [`Stream`] or drop it.
+    ///
+    /// ```no_run
+    /// # use testground::client::Client;
+    /// # let client: Client = todo!();
+    /// client.subscribe("my_topic", u16::MAX.into());
+    /// ```
     pub async fn subscribe(
         &self,
         topic: impl Into<Cow<'static, str>>,
+        capacity: usize,
     ) -> impl Stream<Item = Result<serde_json::Value, Error>> {
-        let (stream, out) = mpsc::channel(1);
+        let (stream, out) = mpsc::channel(capacity);
 
         let cmd = Command::Subscribe {
             topic: topic.into().into_owned(),
