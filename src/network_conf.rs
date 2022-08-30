@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum FilterAction {
     Accept = 0,
