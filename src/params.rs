@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 
 use std::path::PathBuf;
+use chrono::{DateTime, FixedOffset};
 
 use ipnetwork::IpNetwork;
 
@@ -41,7 +42,7 @@ pub struct RunParameters {
     #[clap(env)]
     pub test_subnet: IpNetwork, // TEST_SUBNET: 16.0.0.0/16
     #[clap(env)]
-    pub test_start_time: String, // TEST_START_TIME: 2022-01-12T15:48:07-05:00
+    pub test_start_time: DateTime<FixedOffset>, // TEST_START_TIME: 2022-01-12T15:48:07-05:00
 
     #[clap(env)]
     pub test_capture_profiles: String, // TEST_CAPTURE_PROFILES:
