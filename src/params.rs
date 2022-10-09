@@ -2,8 +2,8 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 
-use std::path::PathBuf;
 use chrono::{DateTime, FixedOffset};
+use std::path::PathBuf;
 
 use ipnetwork::IpNetwork;
 
