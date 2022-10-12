@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - unreleased
 ### Change
-- Make `RunParameters::test_start_time` from `String` to `DateTime` for ease of use. See [PR 41].
+- Change `RunParameters::test_start_time` from `String` to `DateTime` for ease of use. See [PR 41].
 
 [PR 41]: https://github.com/testground/sdk-rust/pull/41
 
