@@ -14,7 +14,7 @@ version = "0.5.0"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "3", default-features = false, features = ["std", "derive", "env"] }
 futures = { version = "0.3", default-features = false, features = [] }
-if-addrs = "0.7.0"
+if-addrs = "0.8.0"
 influxdb = { version = "0.5", default-features = false, features = ["reqwest", "serde", "serde_json", "derive"] }
 ipnetwork = { version = "0.20.0", default-features = false, features = ["serde"] }
 log = "0.4"
