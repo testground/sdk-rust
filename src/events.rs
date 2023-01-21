@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use serde::Serialize;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Serialize, Debug)]
 pub struct Event {
@@ -11,6 +12,18 @@ pub struct Event {
 pub struct LogLine<'a> {
     pub ts: u128,
     pub event: &'a EventType,
+}
+
+impl LogLine<'_> {
+    pub fn new(event: &EventType) -> LogLine {
+        LogLine {
+            ts: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            event,
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]

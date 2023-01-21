@@ -1,4 +1,7 @@
 use std::borrow::Cow;
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
 
 use crate::{
     background::{BackgroundTask, Command},
@@ -12,6 +15,7 @@ use clap::Parser;
 
 use influxdb::WriteQuery;
 
+use crate::events::LogLine;
 use tokio::sync::{
     mpsc::{self, channel, Sender},
     oneshot,
@@ -31,21 +35,39 @@ pub struct Client {
     global_seq: u64,
     /// A group-scoped sequence number assigned to this test instance by the sync service.
     group_seq: u64,
+    /// A path to `run.out`.
+    run_out: Option<PathBuf>,
 }
 
 impl Client {
     pub async fn new_and_init() -> Result<Self, Box<dyn std::error::Error>> {
-        let run_parameters = RunParameters::try_parse()?;
+        let run_parameters: RunParameters = RunParameters::try_parse()?;
 
         let (cmd_tx, cmd_rx) = channel(1);
 
         let background = BackgroundTask::new(cmd_rx, run_parameters.clone()).await?;
+
+        let run_out = run_parameters
+            .test_outputs_path
+            .to_str()
+            .map(|path_str| {
+                if path_str == "" {
+                    None
+                } else {
+                    let mut path = PathBuf::from(path_str);
+                    path.push("run.out");
+                    Some(path)
+                }
+            })
+            .unwrap_or(None);
+
         // `global_seq` and `group_seq` are initialized by 0 at this point since no way to signal to the sync service.
         let mut client = Self {
             cmd_tx,
             run_parameters,
             global_seq: 0,
             group_seq: 0,
+            run_out,
         };
 
         tokio::spawn(background.run());
@@ -252,6 +274,8 @@ impl Client {
         let json_event = serde_json::to_string(&event).expect("Event Serialization");
 
         println!("{}", json_event);
+
+        self.write(&event.event);
     }
 
     pub async fn record_success(self) -> Result<(), Error> {
@@ -263,6 +287,10 @@ impl Client {
 
         receiver.await.expect(BACKGROUND_SENDER)?;
 
+        self.write(&EventType::Success {
+            group: self.run_parameters.test_group_id.clone(),
+        });
+
         Ok(())
     }
 
@@ -271,11 +299,19 @@ impl Client {
 
         let (sender, receiver) = oneshot::channel();
 
-        let cmd = Command::SignalFailure { error, sender };
+        let cmd = Command::SignalFailure {
+            error: error.clone(),
+            sender,
+        };
 
         self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
+
+        self.write(&EventType::Failure {
+            group: self.run_parameters.test_group_id.clone(),
+            error,
+        });
 
         Ok(())
     }
@@ -291,14 +327,20 @@ impl Client {
         let (sender, receiver) = oneshot::channel();
 
         let cmd = Command::SignalCrash {
-            error,
-            stacktrace,
+            error: error.clone(),
+            stacktrace: stacktrace.clone(),
             sender,
         };
 
         self.cmd_tx.send(cmd).await.expect(BACKGROUND_RECEIVER);
 
         receiver.await.expect(BACKGROUND_SENDER)?;
+
+        self.write(&EventType::Crash {
+            groups: self.run_parameters.test_group_id.clone(),
+            error,
+            stacktrace,
+        });
 
         Ok(())
     }
@@ -331,5 +373,26 @@ impl Client {
     /// Returns a group-scoped sequence number assigned to this test instance.
     pub fn group_seq(&self) -> u64 {
         self.group_seq
+    }
+
+    /// Writes an event to `run.out`.
+    fn write(&self, event_type: &EventType) {
+        if let Some(path) = self.run_out.as_ref() {
+            let mut file = match File::options().create(true).append(true).open(path) {
+                Ok(file) => file,
+                Err(e) => {
+                    eprintln!("Failed to open `run.out`: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = writeln!(
+                file,
+                "{}",
+                serde_json::to_string(&LogLine::new(event_type)).expect("Event Serialization")
+            ) {
+                eprintln!("Failed to write a log to `run.out`: {}", e);
+            }
+        }
     }
 }
