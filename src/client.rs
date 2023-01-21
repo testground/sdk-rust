@@ -51,7 +51,7 @@ impl Client {
             .test_outputs_path
             .to_str()
             .map(|path_str| {
-                if path_str == "" {
+                if path_str.is_empty() {
                     None
                 } else {
                     let mut path = PathBuf::from(path_str);
@@ -86,7 +86,7 @@ impl Client {
             // Note that the sdk-go only signals, but not waits.
             .signal_and_wait(
                 format!("initialized_group_{}", client.run_parameters.test_group_id),
-                client.run_parameters.test_group_instance_count as u64,
+                client.run_parameters.test_group_instance_count,
             )
             .await?;
 
