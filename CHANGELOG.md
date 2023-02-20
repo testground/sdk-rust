@@ -5,10 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.5.0] - unreleased
+### Added
+- Write events to `run.out`. See [PR 45].
+
 ### Change
 - Change `RunParameters::test_start_time` from `String` to `DateTime` for ease of use. See [PR 41].
 
 [PR 41]: https://github.com/testground/sdk-rust/pull/41
+[PR 45]: https://github.com/testground/sdk-rust/pull/45
 
 ## [0.4.0]
 ### Added

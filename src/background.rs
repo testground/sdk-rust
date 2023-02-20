@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures::stream::StreamExt;
 use influxdb::{Client, WriteQuery};
@@ -377,17 +376,7 @@ impl BackgroundTask {
         if let PayloadType::Event(ref event) = payload {
             // The Testground daemon determines the success or failure of a test
             // instance by parsing stdout for runtime events.
-            println!(
-                "{}",
-                serde_json::to_string(&LogLine {
-                    ts: SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos(),
-                    event,
-                })
-                .unwrap(),
-            );
+            println!("{}", serde_json::to_string(&LogLine::new(event)).unwrap());
         }
 
         let request = Request {
