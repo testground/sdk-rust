@@ -22,7 +22,7 @@ soketto = { version = "0.7", default-features = false, features = [] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 serde_repr = "0.1.7"
-serde_with = { version = "2", default-features = false, features = ["macros"] }
+serde_with = { version = "3", default-features = false, features = ["macros"] }
 thiserror = { version = "1", default-features = false, features = [] }
 tokio = { version = "1", default-features = false, features = ["sync", "rt-multi-thread", "macros", "net"] }
 tokio-stream = { version = "0.1", default-features = false, features = [] }
