@@ -96,7 +96,7 @@ pub struct BackgroundTask {
     websocket_tx: soketto::Sender<Compat<tokio::net::TcpStream>>,
     websocket_rx: futures::stream::BoxStream<'static, Result<Vec<u8>, soketto::connection::Error>>,
 
-    influxdb: influxdb::Client,
+    influxdb: Client,
 
     next_id: u64,
 
