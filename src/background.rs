@@ -96,7 +96,7 @@ pub struct BackgroundTask {
     websocket_tx: soketto::Sender<Compat<tokio::net::TcpStream>>,
     websocket_rx: futures::stream::BoxStream<'static, Result<Vec<u8>, soketto::connection::Error>>,
 
-    influxdb: influxdb::Client,
+    influxdb: Client,
 
     next_id: u64,
 
@@ -464,7 +464,7 @@ impl BackgroundTask {
                 let _ = sender.send(Err(Error::SyncService(error)));
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Error(error)) => {
-                let _ = stream.send(Err(Error::SyncService(error)));
+                let _ = stream.send(Err(Error::SyncService(error))).await;
             }
             (PendingRequest::Subscribe { stream }, ResponseType::Subscribe(msg)) => {
                 if stream.send(Ok(msg)).await.is_ok() {
