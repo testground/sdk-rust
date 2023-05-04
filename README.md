@@ -1,5 +1,7 @@
 # Rust Testground SDK
 
+![Testground logo](https://raw.githubusercontent.com/testground/pm/master/logo/TG_Banner_GitHub.jpg)
+
 [![CI](https://github.com/testground/sdk-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/testground/sdk-rust/actions/workflows/ci.yml)
 [![Crate](https://img.shields.io/crates/v/testground.svg)](https://crates.io/crates/testground)
 [![API](https://docs.rs/testground/badge.svg)](https://docs.rs/testground)
